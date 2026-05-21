@@ -1,0 +1,27 @@
+# n8n 工作流导出（含硬编码 API key，禁止上传）
+n8n_workflows/
+
+# 内部测试脚本（含密码哈希等敏感信息）
+_audit.js
+/tmp/
+
+# 备份/临时文件
+*.bak
+*.tmp
+*~
+
+# IDE
+.vscode/
+.idea/
+.claude/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# 环境变量/密钥
+.env
+.env.local
+*.key
+*.pem
+secrets.json

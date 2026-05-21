@@ -1,0 +1,3916 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>选品分析工作台</title>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@300;400;500;700;900&family=JetBrains+Mono:wght@400;600&family=Syne:wght@700;800&display=swap" rel="stylesheet">
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+/* 已登录用户直接隐藏遮罩，防止刷新瞬间闪烁 */
+html.bp-authed #loginOverlay { display: none !important; }
+
+/* ===== 主 Tab 导航（竞品分析 / 文案 / 图片） ===== */
+.main-tabs {
+  display: flex;
+  gap: 6px;
+  padding: 6px;
+  margin: 14px 0 18px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: 0 1px 3px rgba(0,0,0,.2);
+}
+.main-tab {
+  flex: 1;
+  padding: 12px 18px;
+  background: transparent;
+  border: 0;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--sub);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  transition: all .2s ease;
+  position: relative;
+  font-family: inherit;
+}
+.main-tab:hover:not(.active) {
+  background: var(--surface2);
+  color: var(--text);
+}
+.main-tab .main-tab-icon { font-size: 16px; }
+.main-tab.active[data-tab="analysis"] {
+  background: linear-gradient(135deg, #2f81f7, #1f6fdf);
+  color: #fff;
+  box-shadow: 0 4px 16px rgba(47,129,247,.32), inset 0 1px 0 rgba(255,255,255,.15);
+}
+.main-tab.active[data-tab="listing"] {
+  background: linear-gradient(135deg, #a371f7, #8855e0);
+  color: #fff;
+  box-shadow: 0 4px 16px rgba(167,113,247,.32), inset 0 1px 0 rgba(255,255,255,.15);
+}
+.main-tab.active[data-tab="images"] {
+  background: linear-gradient(135deg, #3fb950, #2da245);
+  color: #fff;
+  box-shadow: 0 4px 16px rgba(63,185,80,.32), inset 0 1px 0 rgba(255,255,255,.15);
+}
+
+/* Tab 内容面板（不加左右 padding，沿用 .main 的外层 padding 即可对齐） */
+.tab-pane-main {
+  display: none;
+  animation: tabFadeIn .26s ease;
+}
+.tab-pane-main.active { display: block; }
+@keyframes tabFadeIn {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* 空状态（每个 tab 还没数据时的引导界面） */
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 80px 24px 90px;
+  text-align: center;
+  gap: 14px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  margin-top: 8px;
+}
+.empty-state-icon {
+  font-size: 64px;
+  opacity: .28;
+  filter: grayscale(.5);
+  line-height: 1;
+  margin-bottom: 6px;
+}
+.empty-state-title {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text);
+  letter-spacing: .3px;
+}
+.empty-state-hint {
+  font-size: 12px;
+  color: var(--sub);
+  max-width: 460px;
+  line-height: 1.85;
+  margin-bottom: 6px;
+}
+.empty-state .btn { margin-top: 10px; padding: 10px 22px; font-size: 13px; }
+
+/* ===== 全局 Toast 通知 ===== */
+.bp-toast {
+  position: fixed;
+  top: 24px;
+  right: -460px;
+  z-index: 11000;
+  min-width: 280px;
+  max-width: 420px;
+  padding: 14px 16px;
+  border-radius: 10px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  box-shadow: 0 12px 36px rgba(0,0,0,.4);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  opacity: 0;
+  transition: right .35s cubic-bezier(.16,.84,.44,1), opacity .25s ease;
+  pointer-events: none;
+}
+.bp-toast.show {
+  right: 24px;
+  opacity: 1;
+  pointer-events: auto;
+}
+.bp-toast.success {
+  border-color: var(--accent3);
+  background: linear-gradient(135deg, rgba(63,185,80,.10), var(--surface) 60%);
+}
+.bp-toast.error {
+  border-color: var(--red);
+  background: linear-gradient(135deg, rgba(248,81,73,.10), var(--surface) 60%);
+}
+.bp-toast.info {
+  border-color: var(--accent2);
+  background: linear-gradient(135deg, rgba(167,113,247,.10), var(--surface) 60%);
+}
+.bp-toast-icon { font-size: 22px; line-height: 1; flex: none; }
+.bp-toast-body { flex: 1; line-height: 1.5; }
+.bp-toast-title { font-weight: 700; }
+.bp-toast-sub { font-size: 11px; color: var(--sub); font-weight: 400; margin-top: 2px; }
+.bp-toast-close {
+  background: none; border: 0; color: var(--muted); cursor: pointer;
+  font-size: 16px; padding: 4px 6px; line-height: 1; border-radius: 4px;
+}
+.bp-toast-close:hover { color: var(--text); background: var(--surface2); }
+
+/* 生成中状态：跟 empty-state 共用布局，加脉冲动画 + 实时计时 */
+.generating-state {
+  background: linear-gradient(135deg, rgba(167,113,247,.05), rgba(63,185,80,.04)) !important;
+  border-color: var(--accent2) !important;
+}
+.generating-state.tab-images {
+  background: linear-gradient(135deg, rgba(63,185,80,.06), rgba(47,129,247,.04)) !important;
+  border-color: var(--accent3) !important;
+}
+.generating-state .empty-state-icon {
+  opacity: .7 !important;
+  filter: none !important;
+}
+.generating-state .empty-state-title {
+  background: linear-gradient(90deg, var(--accent2), var(--accent3));
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+.generating-state.tab-images .empty-state-title {
+  background: linear-gradient(90deg, var(--accent3), var(--accent));
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+.generating-counter {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+  padding: 5px 12px;
+  background: rgba(0,0,0,.25);
+  border-radius: 999px;
+  font-size: 12px;
+}
+.generating-counter strong {
+  color: var(--accent2);
+  font-family: 'JetBrains Mono', monospace;
+  font-weight: 700;
+  min-width: 22px;
+  text-align: right;
+}
+.generating-state.tab-images .generating-counter strong { color: var(--accent3); }
+
+/* ===== Listing 字段修改交互 ===== */
+.btn-revise {
+  background: rgba(167,113,247,.12);
+  border: 1px solid rgba(167,113,247,.35);
+  color: var(--accent2);
+  font-size: 10px;
+  padding: 3px 8px;
+  border-radius: 5px;
+  cursor: pointer;
+  margin-right: 6px;
+  margin-left: 4px;
+  white-space: nowrap;
+  transition: all .15s;
+}
+.btn-revise:hover { background: rgba(167,113,247,.22); }
+
+/* Bullet 行的 ✏️ 按钮：浮在右上角，平时半透明 / 悬停高亮 */
+li.bullet-li {
+  position: relative;
+  padding: 6px 60px 6px 4px;
+  margin: 0;
+  border-radius: 4px;
+  transition: background .12s;
+}
+li.bullet-li:hover { background: rgba(255,255,255,.025); }
+.btn-revise-inline {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  margin: 0;
+  padding: 3px 9px;
+  font-size: 10px;
+  opacity: .35;
+  transition: opacity .15s ease, transform .12s ease;
+}
+li.bullet-li:hover .btn-revise-inline { opacity: 1; }
+li.bullet-li.revise-marked .btn-revise-inline { opacity: 1; }
+
+/* 标记态视觉提示 */
+.listing-field.revise-marked,
+li.bullet-li.revise-marked {
+  background: rgba(243,156,18,.06);
+  border-left: 3px solid var(--gold);
+  padding-left: 10px;
+}
+li.bullet-li.revise-marked { padding-right: 56px; }
+.listing-field.revise-marked .btn-revise,
+li.bullet-li.revise-marked .btn-revise {
+  background: rgba(243,156,18,.18);
+  border-color: var(--gold);
+  color: var(--gold);
+}
+
+/* 修改面板（在 li 里展开时）从右上按钮下方出现，独占一行 */
+li.bullet-li .revise-panel {
+  margin: 8px 0 4px;
+  position: relative;
+  z-index: 1;
+}
+
+/* 提交修改 / 全部重写 时的内联状态条 */
+.revise-status {
+  display: none;
+  margin-left: 12px;
+  padding: 3px 10px;
+  font-size: 11px;
+  font-weight: 600;
+  border-radius: 4px;
+  align-items: center;
+  gap: 5px;
+}
+.revise-status.show { display: inline-flex; }
+.revise-status.busy    { background: rgba(167,113,247,.15); color: var(--accent2); }
+.revise-status.success { background: rgba(63,185,80,.15);   color: var(--accent3); }
+.revise-status.error   { background: rgba(248,81,73,.15);   color: var(--red); }
+.revise-status .spinner-sm { width: 12px; height: 12px; }
+.revise-panel {
+  display: none;
+  margin-top: 10px;
+  padding: 10px 12px;
+  background: var(--surface3);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+.revise-panel.open { display: block; }
+.revise-head {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text);
+  margin-bottom: 6px;
+}
+.revise-ta {
+  width: 100%;
+  min-height: 50px;
+  padding: 8px 10px;
+  font-size: 12px;
+  font-family: inherit;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  color: var(--text);
+  resize: vertical;
+  outline: none;
+  box-sizing: border-box;
+}
+.revise-ta:focus { border-color: var(--accent2); }
+.revise-acts {
+  display: flex;
+  gap: 6px;
+  margin-top: 8px;
+  flex-wrap: wrap;
+}
+.revise-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 18px;
+  padding: 14px 16px;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  flex-wrap: wrap;
+}
+.revise-bar-info { flex: 1; min-width: 200px; }
+.revise-bar-actions { display: flex; gap: 8px; }
+button.btn[disabled] {
+  opacity: .45;
+  cursor: not-allowed;
+  filter: grayscale(.5);
+}
+
+/* ===== Listing 版本历史 ===== */
+.history-panel {
+  display: none;
+  margin: 0 14px 12px;
+  padding: 14px;
+  background: var(--surface3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  max-height: 360px;
+  overflow-y: auto;
+}
+.history-panel.open { display: block; }
+.history-head {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text);
+  margin-bottom: 10px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border);
+}
+.history-list { display: flex; flex-direction: column; gap: 8px; }
+.history-item {
+  padding: 10px 12px;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  transition: all .15s;
+}
+.history-item:hover { border-color: var(--accent2); }
+.history-item.is-current {
+  background: rgba(63,185,80,.06);
+  border-color: var(--accent3);
+}
+.history-row1 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+  flex-wrap: wrap;
+}
+.history-time {
+  font-size: 11px;
+  color: var(--muted);
+  font-family: 'JetBrains Mono', monospace;
+}
+.history-badge {
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 4px;
+  letter-spacing: .3px;
+}
+.history-badge-initial { background: rgba(47,129,247,.18); color: var(--accent); }
+.history-badge-partial { background: rgba(243,156,18,.18); color: var(--gold); }
+.history-badge-full    { background: rgba(167,113,247,.18); color: var(--accent2); }
+.history-current-tag {
+  font-size: 10px;
+  color: var(--accent3);
+  font-weight: 700;
+  margin-left: auto;
+}
+.history-title {
+  font-size: 11px;
+  color: var(--sub);
+  line-height: 1.6;
+  margin-bottom: 6px;
+  word-break: break-word;
+}
+.history-item.is-current .history-title { color: var(--text); }
+:root{
+  --bg:#0d1117;--surface:#161b22;--surface2:#1c2128;--surface3:#21262d;
+  --border:#30363d;--border2:#444c56;
+  --text:#e6edf3;--sub:#8b949e;--muted:#484f58;
+  --accent:#2f81f7;--accent2:#a371f7;--accent3:#3fb950;--accent4:#f78166;
+  --gold:#e3b341;--teal:#39d353;
+  --red:#f85149;--orange:#f0883e;--green:#3fb950;
+  --shadow:0 1px 3px rgba(0,0,0,.4);
+  --shadow-lg:0 8px 24px rgba(0,0,0,.5);
+  --radius:8px;--radius-lg:12px;
+}
+body{font-family:'Noto Sans SC',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;line-height:1.6}
+.mono{font-family:'JetBrains Mono',monospace}
+.syne{font-family:'Syne',sans-serif}
+
+/* ===== SCROLLBAR ===== */
+::-webkit-scrollbar{width:6px;height:6px}
+::-webkit-scrollbar-track{background:var(--surface)}
+::-webkit-scrollbar-thumb{background:var(--border2);border-radius:3px}
+
+/* ===== HEADER ===== */
+.header{
+  background:linear-gradient(135deg,#0d1117 0%,#161b22 60%,#1a1f2e 100%);
+  border-bottom:1px solid var(--border);
+  padding:20px 32px;
+  position:sticky;top:0;z-index:100;
+  backdrop-filter:blur(12px);
+}
+.header-inner{max-width:1400px;margin:0 auto;display:flex;align-items:center;justify-content:space-between;gap:16px}
+.logo{display:flex;align-items:center;gap:12px}
+.logo-mark{
+  width:36px;height:36px;
+  background:linear-gradient(135deg,var(--accent),var(--accent2));
+  border-radius:8px;
+  display:flex;align-items:center;justify-content:center;
+  font-size:18px;font-weight:900;color:#fff;font-family:'Syne',sans-serif;
+  box-shadow:0 0 20px rgba(47,129,247,.3);
+}
+.logo-text h1{font-family:'Syne',sans-serif;font-size:16px;font-weight:800;letter-spacing:.5px;line-height:1.2}
+.logo-text .sub{font-size:11px;color:var(--sub);letter-spacing:.3px}
+.header-status{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--sub)}
+.status-dot{width:6px;height:6px;border-radius:50%;background:var(--green);animation:pulse 2s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+
+/* ===== SEARCH ZONE ===== */
+.search-zone{max-width:1400px;margin:0 auto;padding:24px 32px}
+.search-card{
+  background:var(--surface);
+  border:1px solid var(--border);
+  border-radius:var(--radius-lg);
+  padding:20px 24px;
+  display:flex;gap:12px;align-items:center;flex-wrap:wrap;
+  box-shadow:var(--shadow-lg);
+}
+.site-select{
+  padding:9px 14px;
+  background:var(--surface2);
+  border:1px solid var(--border);
+  border-radius:var(--radius);
+  color:var(--text);
+  font-size:13px;font-family:inherit;
+  cursor:pointer;min-width:80px;
+  appearance:none;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%238b949e' stroke-width='2'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+  background-repeat:no-repeat;background-position:right 10px center;
+  padding-right:28px;
+}
+.site-select:focus{outline:none;border-color:var(--accent)}
+.asin-input{
+  flex:1;min-width:280px;
+  padding:9px 16px;
+  background:var(--surface2);
+  border:1px solid var(--border);
+  border-radius:var(--radius);
+  color:var(--text);font-size:13px;font-family:inherit;
+  outline:none;transition:border .2s,box-shadow .2s;
+}
+.asin-input:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(47,129,247,.15)}
+.asin-input::placeholder{color:var(--muted)}
+.btn{
+  padding:9px 20px;border:none;border-radius:var(--radius);
+  font-size:13px;font-weight:600;cursor:pointer;
+  font-family:inherit;transition:all .2s;white-space:nowrap;
+}
+.btn-primary{background:var(--accent);color:#fff}
+.btn-primary:hover{background:#388bfd;box-shadow:0 0 16px rgba(47,129,247,.4)}
+.btn-primary:disabled{background:var(--muted);cursor:not-allowed;box-shadow:none}
+.btn-ghost{background:transparent;color:var(--sub);border:1px solid var(--border)}
+.btn-ghost:hover{border-color:var(--border2);color:var(--text)}
+.btn-purple{background:linear-gradient(135deg,var(--accent2),#7c3aed);color:#fff}
+.btn-purple:hover{opacity:.9;box-shadow:0 0 16px rgba(163,113,247,.4)}
+.btn-purple:disabled{background:var(--muted);cursor:not-allowed;box-shadow:none;opacity:1}
+.btn-green{background:linear-gradient(135deg,var(--accent3),#2ea043);color:#fff}
+.btn-green:hover{opacity:.9;box-shadow:0 0 16px rgba(63,185,80,.4)}
+.btn-green:disabled{background:var(--muted);cursor:not-allowed;box-shadow:none;opacity:1}
+.btn-sm{padding:6px 14px;font-size:12px}
+.btn-xs{padding:4px 10px;font-size:11px}
+
+/* ===== ACTION BAR ===== */
+.action-zone{max-width:1400px;margin:0 auto;padding:0 32px 16px;display:none}
+.action-zone.visible{display:block}
+.action-bar{
+  background:var(--surface);border:1px solid var(--border);
+  border-radius:var(--radius-lg);padding:14px 20px;
+  display:flex;gap:12px;align-items:center;flex-wrap:wrap;
+}
+.action-label{font-size:12px;color:var(--sub);font-weight:500}
+.action-status{font-size:12px;color:var(--sub);display:flex;align-items:center;gap:6px;margin-left:4px}
+.spinner-sm{width:12px;height:12px;border:2px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .8s linear infinite;display:inline-block}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* ===== MAIN ===== */
+.main{max-width:1400px;margin:0 auto;padding:0 32px 60px}
+
+/* ===== ERROR ===== */
+.error-box{
+  display:none;background:rgba(248,81,73,.08);border:1px solid rgba(248,81,73,.3);
+  border-radius:var(--radius);padding:12px 16px;margin-bottom:16px;
+  color:#ffa198;font-size:13px;
+}
+.error-box.visible{display:block}
+
+/* ===== LOADING ===== */
+.loading-wrap{display:none;text-align:center;padding:80px 20px}
+.loading-wrap.visible{display:block}
+.spinner-lg{width:40px;height:40px;border:3px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin 1s linear infinite;margin:0 auto 20px}
+.loading-title{font-size:15px;font-weight:600;margin-bottom:4px}
+.loading-sub{font-size:13px;color:var(--sub)}
+.loading-steps{margin-top:24px;text-align:left;display:inline-block}
+.step{padding:6px 0;color:var(--sub);font-size:12px;display:flex;gap:10px;align-items:center}
+.step.done{color:var(--green)}
+.step-icon{width:16px;text-align:center}
+
+/* ===== RESULTS ===== */
+.results{display:none}
+.results.visible{display:block}
+
+/* ===== CARD ===== */
+.card{
+  background:var(--surface);border:1px solid var(--border);
+  border-radius:var(--radius-lg);padding:20px;
+}
+.card-title{font-size:13px;font-weight:700;color:var(--text);margin-bottom:14px;display:flex;align-items:center;gap:8px}
+.card-title .icon{font-size:16px}
+
+/* ===== PRODUCT HEADER ===== */
+.product-header-card{border-left:3px solid var(--accent)}
+.product-title{font-size:17px;font-weight:700;line-height:1.4;margin-bottom:10px}
+.product-meta{display:flex;gap:12px;flex-wrap:wrap;font-size:12px;color:var(--sub)}
+.product-meta span{display:flex;align-items:center;gap:4px}
+.kpi-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:10px;margin-top:16px}
+.kpi{background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);padding:12px 14px;text-align:center}
+.kpi .k-label{font-size:10px;color:var(--sub);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px}
+.kpi .k-value{font-size:20px;font-weight:800;color:var(--text);font-family:'JetBrains Mono',monospace}
+.kpi .k-unit{font-size:11px;color:var(--muted)}
+
+/* ===== BADGE ===== */
+.badge{display:inline-flex;align-items:center;gap:4px;font-size:11px;font-weight:600;padding:3px 8px;border-radius:12px}
+.badge-green{background:rgba(63,185,80,.15);color:#3fb950;border:1px solid rgba(63,185,80,.3)}
+.badge-yellow{background:rgba(227,179,65,.15);color:#e3b341;border:1px solid rgba(227,179,65,.3)}
+.badge-red{background:rgba(248,81,73,.15);color:#f85149;border:1px solid rgba(248,81,73,.3)}
+.badge-blue{background:rgba(47,129,247,.15);color:#58a6ff;border:1px solid rgba(47,129,247,.3)}
+.badge-purple{background:rgba(163,113,247,.15);color:#bc8cff;border:1px solid rgba(163,113,247,.3)}
+
+/* ===== TABS ===== */
+.tab-nav{
+  display:flex;gap:2px;padding:4px;
+  background:var(--surface);border:1px solid var(--border);
+  border-radius:var(--radius-lg);margin-bottom:16px;
+  overflow-x:auto;scrollbar-width:none;
+}
+.tab-nav::-webkit-scrollbar{display:none}
+.tab-btn{
+  padding:7px 14px;border-radius:6px;font-size:12px;font-weight:500;
+  cursor:pointer;color:var(--sub);transition:all .2s;white-space:nowrap;
+  border:none;background:transparent;font-family:inherit;
+}
+.tab-btn.active{background:var(--surface3);color:var(--text);box-shadow:0 1px 3px rgba(0,0,0,.3)}
+.tab-btn:hover:not(.active){color:var(--text)}
+.tab-pane{display:none}.tab-pane.active{display:block}
+
+/* ===== SCORE RINGS ===== */
+.score-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px}
+.score-item{text-align:center;padding:20px 16px;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius)}
+.ring-wrap{position:relative;width:80px;height:80px;margin:0 auto 10px}
+.ring-wrap svg{transform:rotate(-90deg)}
+.ring-bg{fill:none;stroke:var(--border);stroke-width:7}
+.ring-fg{fill:none;stroke-width:7;stroke-linecap:round;transition:stroke-dashoffset .8s ease}
+.ring-num{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);font-size:18px;font-weight:800;font-family:'JetBrains Mono',monospace}
+.score-label{font-size:12px;font-weight:600;color:var(--text)}
+.score-hint{font-size:10px;color:var(--sub);margin-top:2px}
+.score-desc{font-size:10px;color:var(--sub);margin-top:4px;line-height:1.4}
+
+/* ===== SEASON CHART ===== */
+.season-chart{display:flex;align-items:flex-end;gap:4px;height:100px}
+.s-bar-wrap{flex:1;display:flex;flex-direction:column;align-items:center;gap:4px}
+.s-bar{width:100%;border-radius:3px 3px 0 0;min-height:3px;position:relative}
+.s-bar:hover .s-tip{display:block}
+.s-tip{display:none;position:absolute;top:-28px;left:50%;transform:translateX(-50%);background:var(--surface3);color:var(--text);font-size:10px;padding:2px 6px;border-radius:4px;white-space:nowrap;border:1px solid var(--border)}
+.s-label{font-size:9px;color:var(--muted)}
+
+/* ===== KEYWORD TABLE ===== */
+.kw-table{width:100%;border-collapse:separate;border-spacing:0;font-size:12px}
+.kw-table th{text-align:left;padding:8px 12px;background:var(--surface2);font-weight:600;font-size:10px;color:var(--sub);text-transform:uppercase;letter-spacing:.5px;border-bottom:1px solid var(--border)}
+.kw-table th:first-child{border-radius:6px 0 0 0}
+.kw-table th:last-child{border-radius:0 6px 0 0}
+.kw-table td{padding:8px 12px;border-bottom:1px solid var(--border);vertical-align:middle}
+.kw-table tr:last-child td{border-bottom:none}
+.kw-table tr:hover td{background:var(--surface2)}
+.vol-bar-bg{height:5px;border-radius:3px;background:var(--surface3);width:100px;overflow:hidden}
+.vol-bar{height:100%;border-radius:3px;background:var(--accent)}
+.kw-tag{font-size:10px;padding:2px 6px;border-radius:4px;font-weight:600}
+.kw-core{background:rgba(47,129,247,.15);color:#58a6ff}
+.kw-long{background:rgba(227,179,65,.15);color:#e3b341}
+.kw-trend{background:rgba(63,185,80,.15);color:#3fb950}
+
+/* ===== PAIN POINTS ===== */
+.pain-list{display:flex;flex-direction:column;gap:8px}
+.pain-item{display:flex;gap:10px;padding:12px;background:var(--surface2);border-radius:var(--radius);border:1px solid var(--border)}
+.pain-bar{width:4px;min-height:36px;border-radius:2px;flex-shrink:0;margin-top:2px}
+.pain-bar.high{background:var(--red)}
+.pain-bar.medium{background:var(--orange)}
+.pain-bar.low{background:var(--green)}
+.pain-issue{font-weight:600;font-size:12px;margin-bottom:2px}
+.pain-opp{font-size:11px;color:var(--sub)}
+
+/* ===== COMP TABLE ===== */
+.comp-table{width:100%;border-collapse:separate;border-spacing:0;font-size:12px}
+.comp-table th{text-align:left;padding:8px 12px;background:var(--surface2);font-weight:600;font-size:10px;color:var(--sub);text-transform:uppercase;letter-spacing:.5px;border-bottom:1px solid var(--border)}
+.comp-table td{padding:10px 12px;border-bottom:1px solid var(--border)}
+.comp-table tr:last-child td{border-bottom:none}
+.comp-table tr:hover td{background:rgba(255,255,255,.02)}
+
+/* ===== RISK GRID ===== */
+.risk-cols{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
+.risk-col{border-radius:var(--radius);padding:14px}
+.risk-col.r-high{background:rgba(248,81,73,.06);border:1px solid rgba(248,81,73,.2)}
+.risk-col.r-med{background:rgba(240,136,62,.06);border:1px solid rgba(240,136,62,.2)}
+.risk-col.r-low{background:rgba(63,185,80,.06);border:1px solid rgba(63,185,80,.2)}
+.risk-col-title{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px}
+.r-high .risk-col-title{color:var(--red)}
+.r-med .risk-col-title{color:var(--orange)}
+.r-low .risk-col-title{color:var(--green)}
+.risk-item{font-size:11px;margin-bottom:6px;line-height:1.5;color:var(--sub)}
+.risk-item strong{color:var(--text)}
+
+/* ===== PORTRAIT ===== */
+.portrait-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:8px}
+.portrait-item{padding:12px;background:var(--surface2);border-radius:var(--radius);border:1px solid var(--border)}
+.p-label{font-size:10px;color:var(--sub);text-transform:uppercase;letter-spacing:.5px;margin-bottom:3px}
+.p-value{font-size:12px;font-weight:500;color:var(--text)}
+
+/* ===== STRATEGY ===== */
+.strategy-block{padding:14px;background:var(--surface2);border-radius:var(--radius);border-left:3px solid var(--accent);margin-bottom:10px}
+.strategy-block h4{font-size:12px;font-weight:700;margin-bottom:6px;color:var(--text)}
+.strategy-block p{font-size:12px;color:var(--sub);line-height:1.7}
+
+/* ===== ENTRY ANALYSIS ===== */
+.entry-verdict{text-align:center;padding:28px 20px;position:relative;overflow:hidden}
+.entry-verdict::before{content:'';position:absolute;top:0;left:0;right:0;height:3px}
+.ev-go::before{background:linear-gradient(90deg,var(--green),var(--teal))}
+.ev-caution::before{background:linear-gradient(90deg,var(--orange),var(--gold))}
+.ev-stop::before{background:linear-gradient(90deg,var(--red),var(--accent4))}
+.ev-score{font-size:52px;font-weight:900;line-height:1;font-family:'Syne',sans-serif}
+.ev-label{font-size:16px;font-weight:700;margin-top:8px}
+.ev-sub{font-size:12px;color:var(--sub);margin-top:6px;max-width:480px;margin-left:auto;margin-right:auto}
+.ev-meter{height:6px;border-radius:3px;background:linear-gradient(90deg,var(--red) 0%,var(--orange) 35%,var(--green) 70%,var(--teal) 100%);position:relative;margin:20px auto 6px;max-width:360px}
+.ev-dot{width:16px;height:16px;border-radius:50%;background:var(--text);border:3px solid var(--bg);position:absolute;top:-5px;box-shadow:0 2px 6px rgba(0,0,0,.5);transition:left .8s ease}
+.ev-labels{display:flex;justify-content:space-between;max-width:360px;margin:0 auto;font-size:10px;color:var(--muted)}
+.entry-dims{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.e-dim{padding:14px;background:var(--surface2);border-radius:var(--radius);border:1px solid var(--border)}
+.e-dim-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
+.e-dim-name{font-size:12px;font-weight:600}
+.e-dim-score{font-size:14px;font-weight:800;font-family:'JetBrains Mono',monospace}
+.e-dim-bar{height:4px;border-radius:2px;background:var(--border);overflow:hidden}
+.e-dim-fill{height:100%;border-radius:2px;transition:width .8s ease}
+.e-dim-detail{font-size:11px;color:var(--sub);margin-top:6px;line-height:1.5}
+.checklist{list-style:none;padding:0}
+.checklist li{padding:9px 12px;font-size:12px;display:flex;gap:8px;align-items:flex-start;border-bottom:1px solid var(--border)}
+.checklist li:last-child{border-bottom:none}
+.chk-icon{width:18px;height:18px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:#fff;flex-shrink:0;margin-top:1px}
+.chk-pass{background:var(--green)}.chk-warn{background:var(--orange)}.chk-fail{background:var(--red)}
+
+/* ===== FULL REPORT ===== */
+.full-report{background:var(--surface2);border-radius:var(--radius);padding:20px 24px;font-size:13px;line-height:1.9;color:var(--sub)}
+.full-report h1,.full-report h2{color:var(--text);font-size:15px;font-weight:700;margin:20px 0 10px;padding-bottom:6px;border-bottom:1px solid var(--border)}
+.full-report h3,.full-report h4{color:var(--text);font-size:13px;font-weight:600;margin:14px 0 6px}
+.full-report p{margin-bottom:10px}
+.full-report ul,.full-report ol{padding-left:20px;margin-bottom:10px}
+.full-report li{margin-bottom:4px}
+.full-report strong{color:var(--text);font-weight:700}
+.full-report em{color:var(--gold)}
+.full-report table{width:100%;border-collapse:collapse;margin:12px 0;font-size:12px}
+.full-report th{background:var(--surface3);padding:8px 12px;text-align:left;font-weight:600;color:var(--text);border:1px solid var(--border)}
+.full-report td{padding:7px 12px;border:1px solid var(--border);vertical-align:top}
+.full-report tr:hover td{background:var(--surface3)}
+.full-report blockquote{border-left:3px solid var(--accent);padding:8px 14px;margin:10px 0;background:rgba(47,129,247,.06);border-radius:0 var(--radius) var(--radius) 0;color:var(--text)}
+.full-report hr{border:none;border-top:1px solid var(--border);margin:20px 0}
+.full-report code{background:var(--surface3);padding:1px 6px;border-radius:4px;font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--accent3)}
+
+/* ===== TWO COL ===== */
+.two-col{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+@media(max-width:768px){.two-col{grid-template-columns:1fr}.risk-cols{grid-template-columns:1fr}.entry-dims{grid-template-columns:1fr}.kpi-grid{grid-template-columns:repeat(3,1fr)}}
+
+/* ===== SECTION ===== */
+.section{margin-bottom:16px}
+
+/* ===== LISTING PANEL ===== */
+.listing-panel{display:none;position:fixed;top:0;left:0;right:0;bottom:0;z-index:200;background:rgba(0,0,0,.7);backdrop-filter:blur(6px);align-items:center;justify-content:center}
+.listing-panel.visible{display:flex}
+.listing-modal{
+  background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);
+  width:min(760px,95vw);max-height:90vh;overflow-y:auto;
+  box-shadow:0 20px 60px rgba(0,0,0,.8);
+}
+.modal-header{padding:16px 20px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;position:sticky;top:0;background:var(--surface);z-index:1}
+.modal-header h3{font-size:14px;font-weight:700;display:flex;align-items:center;gap:8px}
+.modal-close{background:none;border:none;color:var(--sub);font-size:18px;cursor:pointer;padding:4px 8px;border-radius:4px}
+.modal-close:hover{background:var(--surface2);color:var(--text)}
+.modal-body{padding:20px}
+.modal-footer{padding:14px 20px;border-top:1px solid var(--border);display:flex;gap:10px;justify-content:flex-end;position:sticky;bottom:0;background:var(--surface)}
+
+/* ===== IMAGE UPLOAD ===== */
+.upload-section{margin-bottom:18px}
+.upload-label{font-size:12px;font-weight:600;color:var(--text);margin-bottom:8px;display:flex;align-items:center;gap:6px}
+.upload-label .opt{font-size:10px;color:var(--sub);font-weight:400}
+.upload-zone{
+  border:1.5px dashed var(--border2);border-radius:var(--radius);
+  padding:14px;background:var(--surface2);
+  cursor:pointer;transition:border .2s,background .2s;
+}
+.upload-zone:hover{border-color:var(--accent);background:rgba(47,129,247,.05)}
+.upload-zone input[type=file]{display:none}
+.upload-placeholder{text-align:center;color:var(--sub);font-size:12px;padding:10px 0}
+.upload-placeholder .upload-icon{font-size:24px;margin-bottom:6px}
+.image-previews{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px}
+.img-preview{position:relative;width:72px;height:72px;border-radius:6px;overflow:hidden;border:1px solid var(--border)}
+.img-preview img{width:100%;height:100%;object-fit:cover}
+.img-remove{position:absolute;top:2px;right:2px;width:18px;height:18px;background:rgba(0,0,0,.7);border:none;border-radius:50%;color:#fff;font-size:11px;cursor:pointer;display:flex;align-items:center;justify-content:center;line-height:1}
+.advantage-input{
+  width:100%;min-height:80px;
+  padding:10px 14px;background:var(--surface2);border:1px solid var(--border);
+  border-radius:var(--radius);color:var(--text);font-size:12px;font-family:inherit;
+  resize:vertical;outline:none;transition:border .2s;line-height:1.6;
+}
+.advantage-input:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(47,129,247,.1)}
+.advantage-input::placeholder{color:var(--muted)}
+.form-row{margin-bottom:14px}
+.form-row-label{font-size:12px;font-weight:600;color:var(--text);margin-bottom:6px;display:flex;align-items:center;gap:6px}
+.opt-tag{font-size:10px;color:var(--sub);font-weight:400;padding:1px 6px;background:var(--surface3);border-radius:4px}
+
+/* ===== LISTING OUTPUT ===== */
+.listing-output{display:none;margin-top:16px}
+.listing-output.visible{display:block}
+.listing-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);overflow:hidden}
+.listing-card-header{background:linear-gradient(135deg,rgba(163,113,247,.15),rgba(47,129,247,.1));padding:14px 20px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center}
+.listing-card-header h3{font-size:14px;font-weight:700;display:flex;align-items:center;gap:8px;color:var(--accent2)}
+.listing-body{padding:20px}
+.listing-field{margin-bottom:18px}
+.listing-field:last-child{margin-bottom:0}
+.lf-label{font-size:10px;font-weight:700;color:var(--accent2);text-transform:uppercase;letter-spacing:.8px;margin-bottom:6px;display:flex;align-items:center;justify-content:space-between}
+.lf-content{
+  font-size:12px;line-height:1.8;color:var(--text);
+  background:var(--surface2);border-radius:var(--radius);
+  padding:12px 14px;border:1px solid var(--border);
+  white-space:pre-wrap;position:relative;
+}
+.copy-btn{
+  position:absolute;top:8px;right:8px;
+  background:var(--surface3);border:1px solid var(--border);
+  border-radius:5px;padding:3px 8px;font-size:10px;
+  cursor:pointer;color:var(--sub);font-family:inherit;transition:all .2s;
+}
+.copy-btn:hover{border-color:var(--accent);color:var(--accent)}
+.lf-bullets{list-style:none;padding:0;margin:0}
+.lf-bullets li{padding:6px 0;border-bottom:1px solid var(--border);font-size:12px;line-height:1.6}
+.lf-bullets li:last-child{border-bottom:none}
+.lf-reason{margin-top:10px;border-radius:8px;overflow:hidden;border:1px solid rgba(47,129,247,.2)}
+.lf-reason-header{
+  background:rgba(47,129,247,.1);padding:8px 14px;
+  font-size:11px;font-weight:700;color:var(--accent);
+  display:flex;align-items:center;gap:6px;letter-spacing:.3px;
+}
+.lf-reason-body{padding:12px 14px;background:rgba(47,129,247,.04)}
+.lf-reason-section{margin-bottom:12px}
+.lf-reason-section:last-child{margin-bottom:0}
+.lf-reason-section-title{
+  font-size:11px;font-weight:700;color:var(--text);
+  margin-bottom:5px;display:flex;align-items:center;gap:5px;
+}
+.lf-reason-section-body{font-size:11px;color:var(--sub);line-height:1.7}
+.lf-reason-section-body li{margin-left:14px;margin-bottom:3px;list-style:disc}
+.algo-tags{display:flex;flex-wrap:wrap;gap:4px;margin-top:6px}
+.algo-tag{font-size:10px;padding:2px 8px;border-radius:10px;font-weight:600}
+.algo-a9{background:rgba(47,129,247,.15);color:#58a6ff;border:1px solid rgba(47,129,247,.3)}
+.algo-cosmo{background:rgba(163,113,247,.15);color:#bc8cff;border:1px solid rgba(163,113,247,.3)}
+.algo-rufus{background:rgba(63,185,80,.15);color:#3fb950;border:1px solid rgba(63,185,80,.3)}
+.kw-used{margin-top:10px;display:flex;flex-wrap:wrap;gap:4px;align-items:center}
+.kw-used-label{font-size:10px;color:var(--sub);font-weight:600;margin-right:2px}
+.kw-chip{font-size:10px;padding:2px 9px;border-radius:10px;font-weight:600;cursor:default}
+.kw-chip-high{background:rgba(243,156,18,.18);color:#f39c12;border:1px solid rgba(243,156,18,.3)}
+.kw-chip-med{background:rgba(47,129,247,.15);color:#58a6ff;border:1px solid rgba(47,129,247,.25)}
+.kw-chip-low{background:rgba(63,185,80,.12);color:#3fb950;border:1px solid rgba(63,185,80,.25)}
+.kw-hl-high{background:rgba(243,156,18,.25);color:#f39c12;border-radius:3px;padding:0 2px;font-weight:700}
+.kw-hl-med{background:rgba(47,129,247,.2);color:#58a6ff;border-radius:3px;padding:0 2px;font-weight:600}
+.kw-hl-low{background:rgba(63,185,80,.15);color:#3fb950;border-radius:3px;padding:0 2px;font-weight:600}
+.kw-legend{display:flex;gap:10px;margin-top:6px;flex-wrap:wrap}
+.kw-legend-item{font-size:10px;color:var(--sub);display:flex;align-items:center;gap:4px}
+.kw-legend-dot{width:8px;height:8px;border-radius:2px}
+
+/* ===== IMAGE PANEL ===== */
+.image-panel{display:none;position:fixed;top:0;left:0;right:0;bottom:0;z-index:200;background:rgba(0,0,0,.7);backdrop-filter:blur(6px);align-items:center;justify-content:center}
+.image-panel.visible{display:flex}
+.image-modal{
+  background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);
+  width:min(680px,95vw);max-height:90vh;overflow-y:auto;
+  box-shadow:0 20px 60px rgba(0,0,0,.8);
+}
+
+/* ===== IMAGE OUTPUT ===== */
+.image-output{display:none;margin-top:16px}
+.image-output.visible{display:block}
+.image-section-title{font-size:14px;font-weight:700;color:var(--accent3);margin-bottom:12px;display:flex;align-items:center;gap:8px}
+.main-images-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:14px;margin-bottom:20px}
+.img-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);overflow:hidden}
+.img-card-img{width:100%;height:220px;object-fit:cover;display:block;background:var(--surface2)}
+.img-card-img-error{width:100%;height:220px;display:flex;align-items:center;justify-content:center;background:var(--surface2);color:var(--muted);font-size:12px;flex-direction:column;gap:8px}
+.img-card-info{padding:12px 14px;border-top:1px solid var(--border)}
+.img-card-label{font-size:12px;font-weight:600;color:var(--text);margin-bottom:2px}
+.img-card-prompt{font-size:11px;color:var(--sub);line-height:1.4;margin-bottom:8px}
+.img-card-actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.img-card-actions a{font-size:11px;color:var(--accent);text-decoration:none;font-weight:600}
+.img-card-actions a:hover{text-decoration:underline}
+.regen-btn{background:var(--surface2);border:1px solid var(--border);border-radius:5px;padding:4px 10px;font-size:11px;cursor:pointer;color:var(--sub);font-family:inherit;transition:all .2s}
+.regen-btn:hover{border-color:var(--accent3);color:var(--accent3)}
+.prompt-panel{display:none;margin-top:10px;padding-top:10px;border-top:1px solid var(--border)}
+.prompt-panel.open{display:block}
+.prompt-head{font-size:10px;font-weight:700;color:var(--accent);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px}
+.prompt-ta{width:100%;padding:8px 10px;background:var(--surface3);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:11px;font-family:inherit;line-height:1.6;resize:vertical;min-height:72px;outline:none;transition:border .2s}
+.prompt-ta:focus{border-color:var(--accent)}
+.prompt-acts{display:flex;gap:8px;margin-top:8px;align-items:center}
+.prompt-go{padding:5px 12px;font-size:11px;font-weight:600;background:linear-gradient(135deg,var(--accent3),#2ea043);color:#fff;border:none;border-radius:5px;cursor:pointer;font-family:inherit}
+.prompt-go:hover{opacity:.85}
+.prompt-go:disabled{background:var(--muted);cursor:not-allowed}
+.prompt-reset{padding:5px 10px;font-size:11px;background:transparent;border:1px solid var(--border);border-radius:5px;color:var(--sub);cursor:pointer;font-family:inherit}
+.prompt-reset:hover{border-color:var(--border2);color:var(--text)}
+.prompt-panel{display:none;margin-top:10px;border-top:1px solid var(--border);padding-top:10px}
+.prompt-panel.open{display:block}
+.prompt-label{font-size:10px;font-weight:700;color:var(--accent);text-transform:uppercase;letter-spacing:.5px;margin-bottom:5px;display:flex;align-items:center;gap:6px}
+.prompt-textarea{width:100%;padding:8px 10px;background:var(--surface3);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:11px;font-family:inherit;line-height:1.6;resize:vertical;min-height:80px;outline:none;transition:border .2s}
+.prompt-textarea:focus{border-color:var(--accent)}
+.prompt-actions{display:flex;gap:8px;margin-top:8px;align-items:center}
+.prompt-regen-btn{padding:5px 14px;font-size:11px;font-weight:600;background:linear-gradient(135deg,var(--accent3),#2ea043);color:#fff;border:none;border-radius:5px;cursor:pointer;font-family:inherit;transition:all .2s}
+.prompt-regen-btn:hover{opacity:.85;box-shadow:0 0 10px rgba(63,185,80,.4)}
+.prompt-regen-btn:disabled{background:var(--muted);cursor:not-allowed}
+.prompt-reset-btn{padding:5px 10px;font-size:11px;background:transparent;border:1px solid var(--border);border-radius:5px;color:var(--sub);cursor:pointer;font-family:inherit}
+.prompt-reset-btn:hover{border-color:var(--border2);color:var(--text)}
+.prompt-note{font-size:10px;color:var(--muted);flex:1;text-align:right}
+.regen-input{
+  width:100%;margin-top:8px;padding:6px 10px;
+  background:var(--bg);border:1px solid var(--border);border-radius:5px;
+  color:var(--text);font-size:11px;font-family:inherit;outline:none;
+  display:none;
+}
+.regen-input.visible{display:block}
+.regen-input:focus{border-color:var(--accent3)}
+.aplus-section{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);overflow:hidden}
+.aplus-header{background:linear-gradient(135deg,rgba(63,185,80,.1),rgba(47,129,247,.08));padding:14px 20px;border-bottom:1px solid var(--border)}
+.aplus-header h3{font-size:14px;font-weight:700;color:var(--accent3);display:flex;align-items:center;gap:8px}
+.aplus-body{padding:20px}
+.aplus-module{margin-bottom:16px;padding:14px;background:var(--surface2);border-radius:var(--radius);border:1px solid var(--border)}
+.aplus-module-title{font-size:11px;font-weight:700;color:var(--accent);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px}
+.aplus-module-content{font-size:12px;color:var(--sub);line-height:1.7}
+.aplus-composition{font-size:11px;color:var(--muted);margin-top:6px;padding:6px 10px;background:var(--surface3);border-radius:4px}
+
+/* ===== PROFIT CALC ===== */
+.pc-row{display:flex;align-items:center;justify-content:space-between;padding:7px 0;border-bottom:1px solid var(--border);font-size:12px;gap:8px}
+.pc-row:last-child{border-bottom:none}
+.pc-label{color:var(--sub);flex:1;white-space:nowrap}
+.pc-input-wrap{display:flex;align-items:center;gap:4px}
+.pc-unit{font-size:11px;color:var(--sub);min-width:20px;text-align:left;padding-left:3px}
+.pc-input{width:88px;padding:4px 10px 4px 6px;background:var(--surface3);border:1px solid var(--border);border-radius:4px;color:var(--text);font-size:12px;font-family:'JetBrains Mono',monospace;text-align:right;outline:none;transition:border .15s}
+.pc-input:focus{border-color:var(--accent)}
+.pc-sep{border:none;border-top:1px dashed var(--border2);margin:6px 0}
+.pc-result{margin-top:10px;padding:12px;border-radius:var(--radius);text-align:center}
+.pc-result.good{background:rgba(63,185,80,.1);border:1px solid rgba(63,185,80,.3)}
+.pc-result.ok{background:rgba(227,179,65,.1);border:1px solid rgba(227,179,65,.3)}
+.pc-result.bad{background:rgba(248,81,73,.1);border:1px solid rgba(248,81,73,.3)}
+.pc-margin{font-size:28px;font-weight:900;font-family:'JetBrains Mono',monospace;line-height:1.1}
+.pc-detail{font-size:11px;color:var(--sub);margin-top:6px;line-height:1.7}
+.pc-hint{font-size:10px;color:var(--muted);margin-top:8px;text-align:center}
+.pc-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin:6px 0}
+.pc-grid-item{display:flex;align-items:center;justify-content:space-between;padding:6px 8px;background:var(--surface3);border-radius:4px;gap:4px;font-size:12px}
+.pc-sub-title{font-size:10px;font-weight:700;color:var(--sub);text-transform:uppercase;letter-spacing:.5px;margin:8px 0 4px;padding-bottom:4px;border-bottom:1px solid var(--border)}
+.pc-ship-row{display:flex;align-items:center;gap:5px;padding:5px 0;font-size:11px;border-bottom:1px solid var(--border)}
+.pc-ship-row:last-child{border-bottom:none}
+.pc-auto{width:72px;padding:4px 8px;background:var(--surface2);border:1px solid var(--border);border-radius:4px;color:var(--muted);font-size:12px;font-family:'JetBrains Mono',monospace;text-align:right}
+
+/* ===== FADE IN ===== */
+.fade-in{animation:fadeIn .35s ease}
+@keyframes fadeIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
+
+/* ===== IMAGE PANEL NOTICE ===== */
+.notice{padding:10px 14px;background:rgba(227,179,65,.06);border:1px solid rgba(227,179,65,.2);border-radius:var(--radius);font-size:12px;color:#e3b341;display:flex;align-items:flex-start;gap:8px;margin-bottom:14px}
+/* ===== DOWNLOAD ALL BTN ===== */
+.download-all-bar{display:flex;justify-content:flex-end;margin-bottom:12px;gap:8px;flex-wrap:wrap}
+.btn-download-all{padding:7px 16px;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);color:var(--sub);font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;transition:all .2s;display:flex;align-items:center;gap:6px}
+.btn-download-all:hover{border-color:var(--accent3);color:var(--accent3)}
+.btn-download-all:disabled{opacity:.4;cursor:not-allowed}
+
+/* ===== PATENT PANEL ===== */
+.btn-patent{background:linear-gradient(135deg,#e3b341,#c8920a);color:#fff}
+.btn-patent:hover{opacity:.9;box-shadow:0 0 16px rgba(227,179,65,.4)}
+.patent-panel{display:none;position:fixed;top:0;left:0;right:0;bottom:0;z-index:200;background:rgba(0,0,0,.7);backdrop-filter:blur(6px);align-items:center;justify-content:center}
+.patent-panel.visible{display:flex}
+.patent-modal{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);width:min(680px,95vw);max-height:90vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,.8)}
+.patent-section{margin-bottom:14px;padding:14px;background:var(--surface2);border-radius:var(--radius);border:1px solid var(--border)}
+.patent-section-title{font-size:13px;font-weight:700;color:var(--text);margin-bottom:10px;display:flex;align-items:center;gap:8px}
+.patent-tool-row{display:flex;gap:10px;margin-bottom:10px;flex-wrap:wrap}
+.patent-tool-btn{flex:1;min-width:140px;padding:10px 14px;border-radius:var(--radius);background:var(--surface);border:1px solid var(--border);cursor:pointer;font-family:inherit;transition:all .2s;text-align:left;display:block}
+.patent-tool-btn:hover{border-color:var(--accent);background:rgba(47,129,247,.06)}
+.ptb-name{font-size:12px;font-weight:700;color:var(--text);margin-bottom:2px}
+.ptb-desc{font-size:10px;color:var(--sub);line-height:1.4}
+.ptb-action{font-size:11px;color:var(--accent);font-weight:600;margin-top:6px}
+.patent-tips{padding-top:6px;border-top:1px solid var(--border)}
+.patent-tip{font-size:11px;color:var(--sub);padding:3px 0;line-height:1.6;display:flex;gap:6px}
+</style>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/marked/9.1.6/marked.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+</head>
+<body>
+<!-- 登录后立即标记 html，避免遮罩闪烁 -->
+<script>if (localStorage.getItem('bp_auth') === '1') document.documentElement.classList.add('bp-authed');</script>
+
+<!-- ===== 登录遮罩 ===== -->
+<div id="loginOverlay" style="position:fixed;inset:0;z-index:10000;background:linear-gradient(135deg,#0f172a 0%,#1e293b 100%);display:flex;align-items:center;justify-content:center;flex-direction:column;gap:18px">
+  <div style="background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.1);backdrop-filter:blur(20px);border-radius:14px;padding:36px 40px;width:min(380px,calc(100vw - 32px));box-shadow:0 24px 80px rgba(0,0,0,.4)">
+    <div style="text-align:center;margin-bottom:24px">
+      <div style="width:56px;height:56px;margin:0 auto 14px;border-radius:14px;background:linear-gradient(135deg,#a78bfa,#34d399);display:flex;align-items:center;justify-content:center;font-size:26px;font-weight:800;color:#0f172a">B</div>
+      <div style="font-size:16px;font-weight:700;color:#f1f5f9">选品分析工作台</div>
+      <div style="font-size:11px;color:#94a3b8;margin-top:4px">请输入访问密码</div>
+    </div>
+    <input id="pwdInput" type="password" placeholder="访问密码" autocomplete="off" style="width:100%;padding:11px 14px;font-size:13px;border-radius:8px;border:1px solid rgba(255,255,255,.15);background:rgba(0,0,0,.25);color:#f1f5f9;outline:none;box-sizing:border-box" />
+    <div id="loginErr" style="font-size:11px;color:#fca5a5;min-height:16px;margin:8px 2px 0"></div>
+    <button id="pwdBtn" type="button" style="width:100%;margin-top:10px;padding:11px;font-size:13px;font-weight:700;border-radius:8px;border:0;cursor:pointer;background:linear-gradient(135deg,#a78bfa,#34d399);color:#0f172a">进入</button>
+  </div>
+</div>
+
+<!-- HEADER -->
+<header class="header">
+  <div class="header-inner">
+    <div class="logo">
+      <div class="logo-mark">B</div>
+      <div class="logo-text">
+        <h1>选品分析工作台</h1>
+        <div class="sub">Sorftime · Claude AI · Gemini 智能分析引擎</div>
+      </div>
+    </div>
+    <div class="header-status">
+      <div class="status-dot"></div>
+      <span>系统运行中</span>
+      <button id="logoutBtn" type="button" onclick="bpLogout()" title="退出登录" style="margin-left:14px;background:none;border:1px solid var(--border);color:var(--sub);font-size:11px;cursor:pointer;padding:4px 10px;border-radius:6px">🔒 退出</button>
+    </div>
+  </div>
+</header>
+
+<!-- SEARCH -->
+<div class="search-zone">
+  <div class="search-card">
+    <select class="site-select" id="siteSelect">
+      <option value="GB">🇬🇧 GB</option>
+      <option value="DE">🇩🇪 DE</option>
+      <option value="FR">🇫🇷 FR</option>
+      <option value="IT">🇮🇹 IT</option>
+      <option value="ES">🇪🇸 ES</option>
+      <option value="US">🇺🇸 US</option>
+      <option value="CA">🇨🇦 CA</option>
+    </select>
+    <input class="asin-input" id="asinInput" placeholder="输入竞品 ASIN 或亚马逊链接，按 Enter 开始分析..." />
+    <button class="btn btn-primary" id="analyzeBtn" onclick="startAnalysis()">开始分析</button>
+    <button class="btn btn-ghost" id="resetBtn" onclick="confirmReset()" title="清空当前所有数据，开始一个新产品的工作流">🆕 新产品</button>
+    <div style="width:1px;background:var(--border);height:26px;margin:0 4px;flex-shrink:0"></div>
+    <button class="btn btn-patent btn-sm" onclick="openPatentPanel()">🔍 专利查询</button>
+  </div>
+</div>
+
+<!-- ACTION BAR（保留状态条用于 setStatus；按钮已被主 Tab 替代） -->
+<div class="action-zone" id="actionZone">
+  <div class="action-bar">
+    <span class="action-status" id="actionStatus"></span>
+  </div>
+</div>
+
+<!-- MAIN -->
+<div class="main">
+  <div class="error-box" id="errorBox"></div>
+
+  <!-- MAIN TABS -->
+  <div class="main-tabs">
+    <button class="main-tab active" data-tab="analysis" onclick="switchMainTab('analysis')">
+      <span class="main-tab-icon">📊</span>竞品分析
+    </button>
+    <button class="main-tab" data-tab="listing" onclick="switchMainTab('listing')">
+      <span class="main-tab-icon">✍️</span>文案生成
+    </button>
+    <button class="main-tab" data-tab="images" onclick="switchMainTab('images')">
+      <span class="main-tab-icon">🎨</span>图片生成
+    </button>
+  </div>
+
+  <!-- Tab 1: 竞品分析 -->
+  <div class="tab-pane-main active" id="pane-analysis">
+    <div class="empty-state" id="analysisEmpty">
+      <div class="empty-state-icon">📊</div>
+      <div class="empty-state-title">输入 ASIN 开始竞品分析</div>
+      <div class="empty-state-hint">在顶部搜索框输入亚马逊 ASIN 或商品链接，点击"开始分析"。AI 会输出市场容量、关键词、竞品对比、用户画像等完整报告。</div>
+    </div>
+    <!-- 分析中状态（startAnalysis 触发时显示） -->
+    <div class="loading-wrap" id="loadingWrap">
+      <div class="spinner-lg"></div>
+      <div class="loading-title">正在分析竞品数据...</div>
+      <div class="loading-sub">约需 30-60 秒，Sorftime + Claude AI 双引擎分析中</div>
+      <div class="loading-steps" id="loadingSteps">
+        <div class="step" data-step="1"><span class="step-icon">⏳</span>调用 Sorftime 获取产品数据</div>
+        <div class="step" data-step="2"><span class="step-icon">⏳</span>获取类目 TOP100 关键词</div>
+        <div class="step" data-step="3"><span class="step-icon">⏳</span>分析消费者评论 & VOC</div>
+        <div class="step" data-step="4"><span class="step-icon">⏳</span>Claude AI 深度分析</div>
+        <div class="step" data-step="5"><span class="step-icon">⏳</span>整合分析结果</div>
+      </div>
+    </div>
+    <div class="results" id="results"></div>
+  </div>
+
+  <!-- Tab 2: 文案生成 -->
+  <div class="tab-pane-main" id="pane-listing">
+    <div class="empty-state" id="listingEmpty">
+      <div class="empty-state-icon">✍️</div>
+      <div class="empty-state-title">还没有生成 Listing 文案</div>
+      <div class="empty-state-hint">点击下方按钮打开生成面板，填入品牌名和卖点。如果已完成竞品分析，AI 会自动使用分析数据；没分析也可以直接生成。</div>
+      <button class="btn btn-purple" onclick="openListingPanel()">✍️ 打开生成面板</button>
+    </div>
+    <!-- 生成中状态（在 generateListing / reviseListing 进行时显示） -->
+    <div class="empty-state generating-state" id="listingGenerating" style="display:none">
+      <div class="empty-state-icon">✍️</div>
+      <div class="empty-state-title" id="listingGenTitle">AI 正在创作 Listing 文案</div>
+      <div class="empty-state-hint">分析卖点 → 提取关键词 → 撰写标题 / 五点 / 详情 / 搜索词<br>请稍候，无需操作</div>
+      <div class="generating-counter"><span class="spinner-sm"></span>已用 <strong id="listingGenSec">0</strong>s / 预计 30-50s</div>
+    </div>
+    <div class="listing-output" id="listingOutput"></div>
+  </div>
+
+  <!-- Tab 3: 图片生成 -->
+  <div class="tab-pane-main" id="pane-images">
+    <div class="empty-state" id="imagesEmpty">
+      <div class="empty-state-icon">🎨</div>
+      <div class="empty-state-title">还没有生成图片</div>
+      <div class="empty-state-hint">点击下方按钮打开生成面板，上传产品图。AI 会先策划 7 张图方案（含主图 / 场景图 / 卖点图等），再用 Gemini 或 GPT 逐张生成。</div>
+      <button class="btn btn-green" onclick="openImagePanel()">🎨 打开生成面板</button>
+    </div>
+    <!-- 生成中状态（plan 阶段显示，骨架卡片出现后隐藏） -->
+    <div class="empty-state generating-state tab-images" id="imagesGenerating" style="display:none">
+      <div class="empty-state-icon">🎨</div>
+      <div class="empty-state-title">AI 正在策划图片方案</div>
+      <div class="empty-state-hint">Claude 正在分析产品并设计每张图的拍摄方案<br>方案就绪后会自动开始生图</div>
+      <div class="generating-counter"><span class="spinner-sm"></span>已用 <strong id="imagesGenSec">0</strong>s / 预计 30-60s</div>
+    </div>
+    <div class="image-output" id="imageOutput"></div>
+  </div>
+</div>
+
+<!-- ===== LISTING MODAL ===== -->
+<div class="listing-panel" id="listingPanel">
+  <div class="listing-modal">
+    <div class="modal-header">
+      <h3>✍️ 生成 Listing 文案</h3>
+      <button class="modal-close" onclick="closeListingPanel()">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="notice">⚡ 上传产品图片可让 Claude 视觉理解产品，生成更精准的文案。图片为选填项，建议压缩至 500KB 以内。</div>
+
+      <!-- 品牌名 -->
+      <div class="form-row">
+        <div class="form-row-label">🏷️ 品牌名称 <span class="opt-tag">必填</span></div>
+        <div style="position:relative">
+          <input type="text" id="brandInput" class="asin-input" style="width:100%;padding:9px 14px;font-size:13px"
+            placeholder="输入品牌名（如：BOODPET、PetZone...）"
+            oninput="onBrandInput(this.value)"
+            onkeydown="onBrandKeydown(event)"
+            autocomplete="off" />
+          <div id="brandDropdown" style="
+            display:none;position:absolute;top:100%;left:0;right:0;z-index:50;
+            background:var(--surface2);border:1px solid var(--border2);border-radius:0 0 8px 8px;
+            box-shadow:0 8px 20px rgba(0,0,0,.4);max-height:160px;overflow-y:auto;
+          "></div>
+        </div>
+        <div style="font-size:11px;color:var(--muted);margin-top:4px">首次输入后自动记忆，下次可直接选择</div>
+      </div>
+
+      <!-- 主产品图 -->
+      <div class="form-row">
+        <div class="form-row-label">📦 主产品图片 <span class="opt-tag">选填，最多5张</span></div>
+        <div class="upload-zone" onclick="triggerUpload('productImgInput')">
+          <input type="file" id="productImgInput" accept="image/*" multiple onchange="handleImgUpload(this,'productPreviews','productImgs')">
+          <div class="upload-placeholder" id="productPlaceholder">
+            <div class="upload-icon">📷</div>
+            <div>点击上传主产品图（白底图/实拍图均可）</div>
+          </div>
+          <div class="image-previews" id="productPreviews"></div>
+        </div>
+      </div>
+
+      <!-- 配件图 -->
+      <div class="form-row">
+        <div class="form-row-label">🧩 配件 / 套装图片 <span class="opt-tag">选填，最多5张</span></div>
+        <div class="upload-zone" onclick="triggerUpload('accessoryImgInput')">
+          <input type="file" id="accessoryImgInput" accept="image/*" multiple onchange="handleImgUpload(this,'accessoryPreviews','accessoryImgs')">
+          <div class="upload-placeholder" id="accessoryPlaceholder">
+            <div class="upload-icon">🔧</div>
+            <div>点击上传配件/套装图，帮助 AI 理解产品全家福</div>
+          </div>
+          <div class="image-previews" id="accessoryPreviews"></div>
+        </div>
+      </div>
+
+      <!-- 优势说明 -->
+      <div class="form-row">
+        <div class="form-row-label">💪 产品核心优势说明 <span class="opt-tag">选填</span></div>
+        <textarea class="advantage-input" id="advantageInput" placeholder="例如：比竞品更厚实的材质（3mm vs 竞品1.5mm）；独特的防滑设计；附赠配件更齐全；已获得CE/RoHS认证；适合宠物使用的安全材质...&#10;&#10;越详细，Listing 写作越精准！"></textarea>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost btn-sm" onclick="closeListingPanel()">取消</button>
+      <button class="btn btn-purple btn-sm" id="listingSubmitBtn" onclick="generateListing()">🚀 开始生成 Listing</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===== IMAGE MODAL ===== -->
+<div class="image-panel" id="imagePanel">
+  <div class="image-modal">
+    <div class="modal-header">
+      <h3>🎨 生成主图 & A+ 页面</h3>
+      <button class="modal-close" onclick="closeImagePanel()">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="notice">⚠️ 提供产品参考图是图生图的关键！AI 会严格保持产品外观，大幅降低产品变形概率。主产品图至少上传1张。</div>
+
+      <!-- 主产品图（复用或重传） -->
+      <div class="form-row">
+        <div class="form-row-label">📦 主产品参考图 <span class="opt-tag">最少1张，最多5张</span></div>
+        <div id="imageProductReuseNotice" style="display:none;padding:8px 12px;background:rgba(63,185,80,.08);border:1px solid rgba(63,185,80,.2);border-radius:6px;font-size:12px;color:var(--accent3);margin-bottom:8px">
+          ✅ 已复用 Listing 阶段上传的主产品图
+        </div>
+        <div class="upload-zone" onclick="triggerUpload('imgProductInput')">
+          <input type="file" id="imgProductInput" accept="image/*" multiple onchange="handleImgUpload(this,'imgProductPreviews','imgProductImgs')">
+          <div class="upload-placeholder" id="imgProductPlaceholder">
+            <div class="upload-icon">📷</div>
+            <div>点击上传产品图（必填，用于图生图参考）</div>
+          </div>
+          <div class="image-previews" id="imgProductPreviews"></div>
+        </div>
+      </div>
+
+      <!-- 配件图 -->
+      <div class="form-row">
+        <div class="form-row-label">🧩 配件图 <span class="opt-tag">选填，最多5张</span></div>
+        <div class="upload-zone" onclick="triggerUpload('imgAccessoryInput')">
+          <input type="file" id="imgAccessoryInput" accept="image/*" multiple onchange="handleImgUpload(this,'imgAccessoryPreviews','imgAccessoryImgs')">
+          <div class="upload-placeholder" id="imgAccessoryPlaceholder">
+            <div class="upload-icon">🔧</div>
+            <div>点击上传配件图（选填）</div>
+          </div>
+          <div class="image-previews" id="imgAccessoryPreviews"></div>
+        </div>
+      </div>
+
+      <!-- A+页面 -->
+      <div class="form-row">
+        <div class="form-row-label" style="display:flex;align-items:center;gap:10px">
+          📋 A+ 页面图片
+          <label style="display:flex;align-items:center;gap:6px;font-weight:400;font-size:12px;cursor:pointer">
+            <input type="checkbox" id="aplusEnabled" style="width:14px;height:14px;accent-color:var(--accent3)" onchange="toggleAplusOptions()">
+            <span style="color:var(--accent3);font-weight:600">同时生成 A+ 图片</span>
+          </label>
+        </div>
+        <div id="aplusOptions" style="display:none;margin-top:8px;padding:12px;background:var(--surface2);border-radius:8px;border:1px solid var(--border)">
+          <div style="display:flex;gap:16px;align-items:center;flex-wrap:wrap;margin-bottom:10px">
+            <div style="display:flex;align-items:center;gap:8px;font-size:12px">
+              <span style="color:var(--sub)">A+ 图片张数：</span>
+              <select id="aplusCount" style="padding:4px 10px;background:var(--surface3);border:1px solid var(--border);border-radius:5px;color:var(--text);font-size:12px;font-family:inherit">
+                <option value="3">3张（基础版）</option>
+                <option value="5" selected>5张（标准版）</option>
+                <option value="7">7张（完整版）</option>
+              </select>
+            </div>
+            <div style="display:flex;align-items:center;gap:8px;font-size:12px">
+              <span style="color:var(--sub)">比例：</span>
+              <select id="aplusRatio" style="padding:4px 10px;background:var(--surface3);border:1px solid var(--border);border-radius:5px;color:var(--text);font-size:12px;font-family:inherit">
+                <option value="970x300">970×300（横幅）</option>
+                <option value="970x600" selected>970×600（标准）</option>
+                <option value="300x300">300×300（方图）</option>
+              </select>
+            </div>
+          </div>
+          <div style="font-size:11px;color:var(--muted);line-height:1.6">
+            💡 A+ 图片包含：品牌故事横幅 / 核心卖点展示 / 使用场景对比 / 人群使用场景 / 产品细节特写等模块，张数越多展示越完整
+          </div>
+        </div>
+      </div>
+
+    <!-- 我们的产品名称 -->
+    <div class="form-row">
+      <div class="form-row-label">🏷️ 我们产品名称 <span class="opt-tag">选填，用于生图提示词</span></div>
+      <input type="text" id="ourProductName" class="asin-input" style="padding:8px 12px;font-size:12px;width:100%" placeholder="例如：竹制折叠鞋架4层 附赠挂钩 防滑防潮">
+    </div>
+      <!-- 额外要求 -->
+      <div class="form-row">
+        <div class="form-row-label">📝 图片风格 / 特殊要求 <span class="opt-tag">选填</span></div>
+        <textarea class="advantage-input" id="imageStyleInput" placeholder="例如：主图背景色要偏向暖色调；需要展示产品尺寸对比；场景要有小孩或宠物互动；A+页面要体现品牌高端感..." style="min-height:60px"></textarea>
+      </div>
+      <!-- 生图模型选择 -->
+      <div class="form-row">
+        <div class="form-row-label">🤖 生图模型 <span class="opt-tag">默认 Gemini</span></div>
+        <select id="imageModel" class="asin-input" style="padding:8px 12px;font-size:12px;width:100%">
+          <option value="gemini" selected>Gemini 2.5 Flash Image（默认，速度快）</option>
+          <option value="gpt">GPT Image 2（OpenAI）</option>
+        </select>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost btn-sm" onclick="closeImagePanel()">取消</button>
+      <button class="btn btn-green btn-sm" id="imageSubmitBtn" onclick="generateImages()">🚀 开始生成图片</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===== PATENT MODAL ===== -->
+<div class="patent-panel" id="patentPanel">
+  <div class="patent-modal">
+    <div class="modal-header">
+      <h3>🔍 专利查询工具</h3>
+      <button class="modal-close" onclick="closePatentPanel()">✕</button>
+    </div>
+    <div class="modal-body">
+
+      <!-- 当前分析产品 -->
+      <div id="patentCurrentProduct" style="display:none;padding:8px 12px;background:rgba(47,129,247,.08);border:1px solid rgba(47,129,247,.2);border-radius:6px;font-size:12px;color:var(--sub);margin-bottom:14px;display:flex;align-items:center;gap:6px">
+        📦 当前分析产品：<span id="patentProductInfo" style="color:var(--text);font-weight:600"></span>
+      </div>
+
+      <!-- 查询关键词 -->
+      <div class="form-row">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+          <span style="font-size:12px;font-weight:600;color:var(--text)">查询关键词 <span style="font-size:10px;color:var(--muted);font-weight:400">| 可编辑</span></span>
+          <button class="btn btn-ghost btn-xs" id="patentCopyBtn" onclick="copyPatentKeywords()">复制</button>
+        </div>
+        <textarea id="patentKeyword" class="advantage-input" rows="2"
+          placeholder="输入产品英文关键词，如: wedge pillow maternity pillow&#10;不知道？可用卖家精灵反查竞品 ASIN 关键词后填入"
+          style="min-height:58px;font-family:'JetBrains Mono',monospace;font-size:12px"></textarea>
+        <div style="font-size:11px;color:var(--muted);margin-top:4px">💡 竞品分析完成后关键词自动同步，也可手动输入或修改</div>
+      </div>
+
+      <!-- 警告提示 -->
+      <div style="padding:8px 12px;background:rgba(240,136,62,.06);border:1px solid rgba(240,136,62,.2);border-radius:6px;font-size:11px;color:var(--orange);margin-bottom:16px;display:flex;align-items:flex-start;gap:6px">
+        <span style="flex-shrink:0">⚠️</span><span>搜索结果不等于侵权判定，需逐一人工核查确认，下方链接在新标签页打开。</span>
+      </div>
+
+      <!-- US 美国专利查询 -->
+      <div style="font-size:11px;font-weight:700;color:var(--sub);text-transform:uppercase;letter-spacing:.8px;margin-bottom:8px">🇺🇸 US 美国专利查询</div>
+
+      <div style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);padding:14px;margin-bottom:10px">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+          <span style="font-size:13px;font-weight:700;color:var(--text)">谷歌专利 Google Patents</span>
+          <span class="badge badge-blue">推荐</span>
+        </div>
+        <div style="font-size:11px;color:var(--sub);line-height:1.7;margin-bottom:10px">
+          点击打开后，在左侧筛选面板设置筛选条件：<br>
+          <span style="color:var(--text)">Patent Office</span> → US &nbsp;·&nbsp;
+          <span style="color:var(--text)">Language</span> → English &nbsp;·&nbsp;
+          <span style="color:var(--text)">Type</span> → Patent<br>
+          筛选结果的第一条往往是与产品品名相关的
+        </div>
+        <button class="btn btn-primary btn-sm" style="width:100%" onclick="openGooglePatents()">🔍 打开 Google Patents 搜索（关键词已填项）</button>
+      </div>
+
+      <div style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);padding:14px;margin-bottom:18px">
+        <div style="font-size:13px;font-weight:700;color:var(--text);margin-bottom:8px">美国官网 USPTO</div>
+        <div style="font-size:11px;color:var(--sub);line-height:1.7;margin-bottom:10px">
+          入站后：Patents → Search our patent database → Advanced Search<br>
+          在 Search 搜索框输入关键词，在 Search Results 列表逐条点击，Document Viewer 在侧栏显示专利详情
+        </div>
+        <div style="display:flex;gap:8px">
+          <button class="btn btn-ghost btn-sm" style="flex:1" onclick="openUSPTO()">🔍 USPTO 查询入口</button>
+          <button class="btn btn-ghost btn-sm" style="flex:1" onclick="window.open('https://www.uspto.gov/','_blank')">🏛 USPTO 官网首页</button>
+        </div>
+      </div>
+
+      <!-- EU 欧盟外观专利查询 -->
+      <div style="font-size:11px;font-weight:700;color:var(--sub);text-transform:uppercase;letter-spacing:.8px;margin-bottom:8px">🇪🇺 EU 欧盟外观专利查询</div>
+
+      <div style="padding:8px 12px;background:rgba(248,81,73,.05);border:1px solid rgba(248,81,73,.2);border-radius:6px;font-size:11px;color:var(--text);margin-bottom:10px;line-height:1.7">
+        ⚠️ <strong>VPN 切换欧洲节点</strong>，查询方式：<strong>图搜图</strong> ——
+        <span style="color:var(--sub)">准备产品品白底正面图（1688 链接内可获取）</span>
+      </div>
+
+      <div style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);padding:14px;margin-bottom:10px">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+          <span style="font-size:13px;font-weight:700;color:var(--text)">TMDN 设计图库</span>
+          <span class="badge badge-green">更方便</span>
+        </div>
+        <div style="font-size:11px;color:var(--sub);line-height:1.7;margin-bottom:10px">
+          上传白底图 → 在左侧勾选前5个分组 → 下滑选择产品对应分类（根据用途/场景/材质）→ 点击"申请"查看相似外观专利
+        </div>
+        <button class="btn btn-green btn-sm" style="width:100%" onclick="openTMDN()">🔍 打开 TMDN 查询</button>
+      </div>
+
+      <div style="background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius);padding:14px;margin-bottom:14px">
+        <div style="font-size:13px;font-weight:700;color:var(--text);margin-bottom:8px">EUIPO eSearch Plus</div>
+        <div style="font-size:11px;color:var(--sub);line-height:1.7;margin-bottom:10px">
+          上传白底产品正面图 → 使用选区工具框选产品图形 → 使用"Search for Designs" → 查看筛选结果
+        </div>
+        <button class="btn btn-ghost btn-sm" style="width:100%" onclick="openEUIPO()">🔍 打开 EUIPO eSearch</button>
+      </div>
+
+      <!-- 参考来源 -->
+      <div style="font-size:10px;color:var(--muted);text-align:center;padding-top:8px;border-top:1px solid var(--border)">
+        参考来源：
+        <a href="https://patents.google.com" target="_blank" style="color:var(--accent);text-decoration:none">Google Patents</a> ·
+        <a href="https://www.uspto.gov" target="_blank" style="color:var(--accent);text-decoration:none">USPTO</a> ·
+        <a href="https://euipo.europa.eu" target="_blank" style="color:var(--accent);text-decoration:none">EUIPO</a>
+      </div>
+
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost btn-sm" onclick="closePatentPanel()">关闭</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===== 全局 Toast 通知（右上角，自动消失） ===== -->
+<div id="bpToast" class="bp-toast"></div>
+
+<!-- ===== Listing 全部重写 输入弹窗 ===== -->
+<div id="rewriteModal" style="display:none;position:fixed;inset:0;z-index:9000;background:rgba(0,0,0,.65);backdrop-filter:blur(4px);align-items:center;justify-content:center;padding:20px">
+  <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);width:min(560px,calc(100vw - 32px));box-shadow:0 24px 80px rgba(0,0,0,.6);overflow:hidden">
+    <div style="padding:18px 22px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between">
+      <div style="font-size:15px;font-weight:700;color:var(--text)">🔄 全部重写 Listing</div>
+      <button onclick="closeRewriteModal()" style="background:none;border:0;color:var(--sub);font-size:18px;cursor:pointer;padding:0;line-height:1">✕</button>
+    </div>
+    <div style="padding:18px 22px">
+      <div style="font-size:12px;color:var(--sub);line-height:1.7;margin-bottom:10px">
+        AI 将基于你的整体反馈完全重新生成所有字段。可以多行描述，越具体效果越好。
+      </div>
+      <textarea id="rewriteOverall" class="revise-ta" rows="6" style="min-height:140px"
+        placeholder="例如：
+- 整体风格要更有冲击力，主打性价比
+- bullet 风格改成更口语化，多用短句
+- description 加入 FAQ 段
+- 标题里突出便携性，去掉 BPA-Free"></textarea>
+    </div>
+    <div style="padding:14px 22px;border-top:1px solid var(--border);display:flex;justify-content:flex-end;gap:8px;background:var(--surface2)">
+      <button class="btn btn-ghost btn-sm" onclick="closeRewriteModal()">取消</button>
+      <button class="btn btn-purple btn-sm" onclick="confirmRewrite()">🚀 开始重写</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ===== AUTH (单一共享密码 · 双哈希设计) =====
+// 源码里只存"双哈希"：sha256(sha256(password))
+// Bearer Token 是 sha256(password)，仅在用户输入正确密码后才能算出来
+// 这样攻击者扒源码看到的 hash 无法直接用来调 n8n
+const _BP_PWD_HASH_2 = 'a93c5e7492b4fda2dd815c6d1330561fc75c1ad066b0d1fe190e88423ea98710';
+let APP_TOKEN = '';  // 登录成功后填充；初始为空，未登录时 fetch 不会附带有效 token
+
+// 纯 JS SHA-256（不依赖 crypto.subtle，局域网 HTTP 也能跑）
+function _bpSha256Hex(text) {
+  const K = new Uint32Array([0x428a2f98,0x71374491,0xb5c0fbcf,0xe9b5dba5,0x3956c25b,0x59f111f1,0x923f82a4,0xab1c5ed5,
+    0xd807aa98,0x12835b01,0x243185be,0x550c7dc3,0x72be5d74,0x80deb1fe,0x9bdc06a7,0xc19bf174,
+    0xe49b69c1,0xefbe4786,0x0fc19dc6,0x240ca1cc,0x2de92c6f,0x4a7484aa,0x5cb0a9dc,0x76f988da,
+    0x983e5152,0xa831c66d,0xb00327c8,0xbf597fc7,0xc6e00bf3,0xd5a79147,0x06ca6351,0x14292967,
+    0x27b70a85,0x2e1b2138,0x4d2c6dfc,0x53380d13,0x650a7354,0x766a0abb,0x81c2c92e,0x92722c85,
+    0xa2bfe8a1,0xa81a664b,0xc24b8b70,0xc76c51a3,0xd192e819,0xd6990624,0xf40e3585,0x106aa070,
+    0x19a4c116,0x1e376c08,0x2748774c,0x34b0bcb5,0x391c0cb3,0x4ed8aa4a,0x5b9cca4f,0x682e6ff3,
+    0x748f82ee,0x78a5636f,0x84c87814,0x8cc70208,0x90befffa,0xa4506ceb,0xbef9a3f7,0xc67178f2]);
+  // UTF-8 编码（TextEncoder 是现代 API，兼容性等同 fetch / Headers）
+  const bytes = new TextEncoder().encode(text);
+  const len = bytes.length;
+  const bitLen = len * 8;
+  // 填充：原始数据 + 0x80 + 0填充到 (length % 64 == 56) + 8 字节长度
+  const pad = ((56 - (len + 1) % 64) + 64) % 64;
+  const total = len + 1 + pad + 8;
+  const buf = new Uint8Array(total);
+  for (let i = 0; i < len; i++) buf[i] = bytes[i];
+  buf[len] = 0x80;
+  // 大端 64 位长度（高 4 字节恒为 0，密码长度足够小）
+  buf[total - 4] = (bitLen >>> 24) & 0xff;
+  buf[total - 3] = (bitLen >>> 16) & 0xff;
+  buf[total - 2] = (bitLen >>> 8) & 0xff;
+  buf[total - 1] = bitLen & 0xff;
+
+  let h0=0x6a09e667,h1=0xbb67ae85,h2=0x3c6ef372,h3=0xa54ff53a,h4=0x510e527f,h5=0x9b05688c,h6=0x1f83d9ab,h7=0x5be0cd19;
+  const w = new Uint32Array(64);
+  for (let chunk = 0; chunk < total; chunk += 64) {
+    for (let i = 0; i < 16; i++) {
+      const j = chunk + i * 4;
+      w[i] = ((buf[j] << 24) | (buf[j+1] << 16) | (buf[j+2] << 8) | buf[j+3]) >>> 0;
+    }
+    for (let i = 16; i < 64; i++) {
+      const s0 = (((w[i-15] >>> 7) | (w[i-15] << 25)) ^ ((w[i-15] >>> 18) | (w[i-15] << 14)) ^ (w[i-15] >>> 3)) >>> 0;
+      const s1 = (((w[i-2] >>> 17) | (w[i-2] << 15)) ^ ((w[i-2] >>> 19) | (w[i-2] << 13)) ^ (w[i-2] >>> 10)) >>> 0;
+      w[i] = (w[i-16] + s0 + w[i-7] + s1) >>> 0;
+    }
+    let a=h0,b=h1,c=h2,d=h3,e=h4,f=h5,g=h6,hh=h7;
+    for (let i = 0; i < 64; i++) {
+      const S1 = (((e >>> 6) | (e << 26)) ^ ((e >>> 11) | (e << 21)) ^ ((e >>> 25) | (e << 7))) >>> 0;
+      const ch = ((e & f) ^ (~e & g)) >>> 0;
+      const t1 = (hh + S1 + ch + K[i] + w[i]) >>> 0;
+      const S0 = (((a >>> 2) | (a << 30)) ^ ((a >>> 13) | (a << 19)) ^ ((a >>> 22) | (a << 10))) >>> 0;
+      const mj = ((a & b) ^ (a & c) ^ (b & c)) >>> 0;
+      const t2 = (S0 + mj) >>> 0;
+      hh=g; g=f; f=e; e=(d+t1)>>>0; d=c; c=b; b=a; a=(t1+t2)>>>0;
+    }
+    h0=(h0+a)>>>0; h1=(h1+b)>>>0; h2=(h2+c)>>>0; h3=(h3+d)>>>0;
+    h4=(h4+e)>>>0; h5=(h5+f)>>>0; h6=(h6+g)>>>0; h7=(h7+hh)>>>0;
+  }
+  const toHex = n => ('00000000' + (n >>> 0).toString(16)).slice(-8);
+  return toHex(h0)+toHex(h1)+toHex(h2)+toHex(h3)+toHex(h4)+toHex(h5)+toHex(h6)+toHex(h7);
+}
+
+// 给所有打到 n8n 的 fetch 自动附加 Authorization 头
+// 并拦截 401/403 → 自动登出（防止 token 失效后用户卡在主界面看不懂错误）
+function _bpInstallAuthFetch() {
+  if (window._bpFetchPatched) return;
+  window._bpFetchPatched = true;
+  const orig = window.fetch.bind(window);
+  window.fetch = function(input, init) {
+    init = init || {};
+    const url = (typeof input === 'string') ? input : (input && input.url) || '';
+    const isN8n = url.indexOf('mai-n8n.zeabur.app') !== -1;
+    if (isN8n) {
+      const h = new Headers(init.headers || {});
+      h.set('Authorization', 'Bearer ' + APP_TOKEN);
+      init.headers = h;
+    }
+    return orig(input, init).then(response => {
+      // 后端拒绝认证 → token 失效，强制重新登录
+      if (isN8n && (response.status === 401 || response.status === 403)) {
+        if (!window._bpReloginShown) {
+          window._bpReloginShown = true;
+          _bpForceRelogin();
+        }
+      }
+      return response;
+    });
+  };
+}
+
+// 清登录状态 + 弹回登录页（token 失效或被踢时用）
+function _bpForceRelogin() {
+  localStorage.removeItem('bp_auth');
+  localStorage.removeItem('bp_token');
+  APP_TOKEN = '';
+  document.documentElement.classList.remove('bp-authed');
+  const ov = document.getElementById('loginOverlay');
+  if (ov) ov.style.display = 'flex';
+  // 重新绑定登录按钮
+  setTimeout(() => {
+    const btn = document.getElementById('pwdBtn');
+    const inp = document.getElementById('pwdInput');
+    if (inp) { inp.value = ''; inp.focus(); }
+    if (btn && !btn._bpReBound) {
+      btn._bpReBound = true;
+      btn.addEventListener('click', _bpTryLogin);
+    }
+    window._bpReloginShown = false;
+  }, 100);
+  if (typeof showToast === 'function') {
+    showToast('登录已过期', '请重新输入密码', 'error');
+  }
+}
+
+function _bpShowApp() {
+  const ov = document.getElementById('loginOverlay');
+  if (ov) ov.style.display = 'none';
+  document.documentElement.classList.add('bp-authed');
+  _bpInstallAuthFetch();
+}
+
+function _bpTryLogin() {
+  const inp = document.getElementById('pwdInput');
+  const errEl = document.getElementById('loginErr');
+  const btn = document.getElementById('pwdBtn');
+  const v = (inp && inp.value ? inp.value : '').trim();
+  if (!v) { if (errEl) errEl.textContent = '请输入密码'; return; }
+  if (btn) { btn.disabled = true; btn.textContent = '验证中...'; }
+  try {
+    // 计算单哈希作为 token 候选；再哈希一次和源码里的双哈希对比
+    const tokenCandidate = _bpSha256Hex(v);
+    const h2 = _bpSha256Hex(tokenCandidate);
+    if (h2 === _BP_PWD_HASH_2) {
+      APP_TOKEN = tokenCandidate;                     // 内存里存真 token
+      localStorage.setItem('bp_auth', '1');
+      localStorage.setItem('bp_token', tokenCandidate); // 持久化避免每次重输
+      if (errEl) errEl.textContent = '';
+      _bpShowApp();
+    } else {
+      if (errEl) errEl.textContent = '密码错误，请重试';
+      if (inp) { inp.select(); }
+    }
+  } catch (e) {
+    console.error('[auth] login error:', e);
+    if (errEl) errEl.textContent = '校验失败: ' + (e.message || e);
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = '进入'; }
+  }
+}
+
+function bpLogout() {
+  localStorage.removeItem('bp_auth');
+  localStorage.removeItem('bp_token');
+  location.reload();
+}
+
+// 启动流程：已登录直接显示主界面 + 装 fetch 拦截；未登录绑定登录按钮
+(function _bpInit() {
+  const ready = () => {
+    const savedToken = localStorage.getItem('bp_token');
+    // 已登录 = 有 bp_auth 标志 + localStorage 里存了 token + token 二次哈希校验通过
+    if (localStorage.getItem('bp_auth') === '1' && savedToken && _bpSha256Hex(savedToken) === _BP_PWD_HASH_2) {
+      APP_TOKEN = savedToken;
+      _bpShowApp();
+    } else {
+      const btn = document.getElementById('pwdBtn');
+      const inp = document.getElementById('pwdInput');
+      if (btn) btn.addEventListener('click', _bpTryLogin);
+      if (inp) {
+        inp.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); _bpTryLogin(); } });
+        setTimeout(() => inp.focus(), 60);
+      }
+    }
+  };
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', ready);
+  else ready();
+})();
+
+// ===== CONSTANTS =====
+const ANALYSIS_WEBHOOK = 'https://mai-n8n.zeabur.app/webhook/product-analysis-v2';
+const REPORT_WEBHOOK   = 'https://mai-n8n.zeabur.app/webhook/product-analysis-report-v2';
+const LISTING_WEBHOOK  = 'https://mai-n8n.zeabur.app/webhook/generate-listing-v2';
+// const IMAGE_WEBHOOK    = 'https://mai-n8n.zeabur.app/webhook/competitor-ref-image';
+const IMAGE_WEBHOOK         = 'https://mai-n8n.zeabur.app/webhook/ai-image-gen';
+const SINGLE_IMAGE_WEBHOOK  = 'https://mai-n8n.zeabur.app/webhook/ai-image-gen';
+
+// ===== 防双击锁 =====
+// 用法：if (!acquireLock('name')) return; ... finally { releaseLock('name'); }
+// 已在生成中的同名任务会被静默忽略，避免用户连点触发多次后端调用
+window._actionLocks = window._actionLocks || {};
+// ===== 主 Tab 切换（竞品分析 / 文案 / 图片，每个独立工作，互不依赖） =====
+function switchMainTab(name) {
+  document.querySelectorAll('.main-tab').forEach(t =>
+    t.classList.toggle('active', t.dataset.tab === name));
+  document.querySelectorAll('.tab-pane-main').forEach(p =>
+    p.classList.toggle('active', p.id === 'pane-' + name));
+  // 切换时回到页面顶部，避免长内容停留在底部
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+// 内容已生成 → 隐藏对应 tab 的空状态
+function hideEmptyState(name) {
+  const el = document.getElementById(name + 'Empty');
+  if (el) el.style.display = 'none';
+}
+function showEmptyState(name) {
+  const el = document.getElementById(name + 'Empty');
+  if (el) el.style.display = '';
+}
+
+// 生成中状态（带实时计时）
+const _genTimers = {};
+function showGeneratingState(name, titleOverride) {
+  hideEmptyState(name);
+  const gen = document.getElementById(name + 'Generating');
+  if (!gen) return;
+  gen.style.display = 'flex';
+  // 切换到对应 tab 让用户看到
+  switchMainTab(name);
+  const titleEl = document.getElementById(name + 'GenTitle');
+  if (titleEl && titleOverride) titleEl.textContent = titleOverride;
+  const secEl = document.getElementById(name + 'GenSec');
+  const start = Date.now();
+  if (secEl) secEl.textContent = '0';
+  if (_genTimers[name]) clearInterval(_genTimers[name]);
+  _genTimers[name] = setInterval(() => {
+    if (secEl) secEl.textContent = String(Math.floor((Date.now() - start) / 1000));
+  }, 1000);
+}
+function hideGeneratingState(name) {
+  const gen = document.getElementById(name + 'Generating');
+  if (gen) gen.style.display = 'none';
+  if (_genTimers[name]) { clearInterval(_genTimers[name]); delete _genTimers[name]; }
+}
+
+// ===== 全局 Toast 通知 =====
+let _toastTimer = null;
+function showToast(title, sub, type) {
+  // type: 'success' | 'error' | 'info'
+  const t = document.getElementById('bpToast');
+  if (!t) return;
+  type = type || 'success';
+  const icon = type === 'success' ? '✅' : type === 'error' ? '❌' : 'ℹ️';
+  t.innerHTML = `
+    <div class="bp-toast-icon">${icon}</div>
+    <div class="bp-toast-body">
+      <div class="bp-toast-title">${title}</div>
+      ${sub ? `<div class="bp-toast-sub">${sub}</div>` : ''}
+    </div>
+    <button class="bp-toast-close" onclick="hideToast()">✕</button>
+  `;
+  // 重置 class 后下一帧加 show，触发滑入动画
+  t.className = 'bp-toast ' + type;
+  requestAnimationFrame(() => t.classList.add('show'));
+  if (_toastTimer) clearTimeout(_toastTimer);
+  // 错误不自动消失（用户需要看清错误信息）；成功 / 提示 4.5s 自动隐
+  if (type !== 'error') _toastTimer = setTimeout(hideToast, 4500);
+}
+function hideToast() {
+  const t = document.getElementById('bpToast');
+  if (t) t.classList.remove('show');
+  if (_toastTimer) { clearTimeout(_toastTimer); _toastTimer = null; }
+}
+
+function acquireLock(name) {
+  if (window._actionLocks[name]) return false;
+  window._actionLocks[name] = true;
+  return true;
+}
+function releaseLock(name) {
+  window._actionLocks[name] = false;
+}
+
+// ===== STATE =====
+let currentData = null;
+window.productImgs = [];
+window.accessoryImgs = [];
+window.imgProductImgs = [];
+window.imgAccessoryImgs = [];
+// Listing 修改流程：保存上一次生成结果 + 用户标记的需修改字段
+window.lastListingResult = null;
+window.reviseFields = {};
+// 版本历史：每次 generateListing / reviseListing 成功都 push 一条；最多保留 5 条
+const LISTING_HISTORY_MAX = 5;
+window.listingHistory = [];
+window.currentHistoryIdx = -1;
+
+// 把一次生成/修改的结果记入历史
+function pushListingHistory(result, mode, feedback) {
+  if (!result) return;
+  const entry = {
+    timestamp: Date.now(),
+    result: JSON.parse(JSON.stringify(result)),  // 深拷贝避免后续被覆盖
+    mode,  // 'initial' | 'partial' | 'full'
+    feedback: feedback ? JSON.parse(JSON.stringify(feedback)) : null
+  };
+  window.listingHistory.push(entry);
+  // 超过上限时丢最旧的，对应 currentHistoryIdx 也要左移以仍然指向"当前显示版本"
+  while (window.listingHistory.length > LISTING_HISTORY_MAX) {
+    window.listingHistory.shift();
+    if (window.currentHistoryIdx > 0) window.currentHistoryIdx--;
+  }
+  window.currentHistoryIdx = window.listingHistory.length - 1;
+}
+
+// "刚刚 / 5 分钟前 / 2 小时前 / MM/DD HH:mm"
+function formatRelativeTime(ts) {
+  const diff = Date.now() - ts;
+  if (diff < 60_000) return '刚刚';
+  if (diff < 3600_000) return Math.floor(diff / 60_000) + ' 分钟前';
+  if (diff < 86400_000) return Math.floor(diff / 3600_000) + ' 小时前';
+  const d = new Date(ts);
+  return `${d.getMonth()+1}/${d.getDate()} ${d.getHours()}:${('0'+d.getMinutes()).slice(-2)}`;
+}
+
+function listingModeLabel(mode) {
+  return mode === 'initial' ? '初次生成' : mode === 'full' ? '全部重写' : '局部修改';
+}
+
+// 用户点 🔁 回退到此版本
+function restoreListingVersion(idx) {
+  if (idx < 0 || idx >= window.listingHistory.length) return;
+  if (idx === window.currentHistoryIdx) return;
+  // 防止在 generateListing / reviseListing 请求进行中切换版本，否则请求回来会覆盖回退结果
+  if (window._actionLocks && window._actionLocks.listingOp) {
+    alert('请等待当前请求完成再切换版本');
+    return;
+  }
+  if (!confirm(`确认回退到此版本？\n当前所有未提交的字段修改标记会被清空。`)) return;
+  window.currentHistoryIdx = idx;
+  window.lastListingResult = JSON.parse(JSON.stringify(window.listingHistory[idx].result));
+  window.reviseFields = {};
+  renderListing(window.lastListingResult);
+}
+
+function toggleHistoryPanel() {
+  const p = document.getElementById('historyPanel');
+  if (p) p.classList.toggle('open');
+}
+
+
+// ===== SAFE JSON PARSE =====
+function safeParseJson(text) {
+  try { return JSON.parse(text); } catch(e) {
+    try {
+      // 第一步：清理特殊引号和控制字符
+      var cleaned = text
+        .replace(/\u201c|\u201d/g, '"')
+        .replace(/\u2018|\u2019/g, "'")
+        .replace(/,\s*([}\]])/g, '$1');
+      return JSON.parse(cleaned);
+    } catch(e2) {
+      try {
+        // 第二步：更激进的清理 - 提取JSON主体后逐字段处理
+        var match = text.match(/\{[\s\S]*\}/);
+        if (!match) throw new Error('no JSON found');
+        var jsonStr = match[0];
+        // 清理字符串值内部的非法控制字符（保留\n \t等合法转义）
+        jsonStr = jsonStr.replace(/"([^"\\]*(\\.[^"\\]*)*)"/g, function(m) {
+          return m.replace(/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/g, ' ')
+                  .replace(/\n/g, '\\n').replace(/\r/g, '\\r');
+        });
+        jsonStr = jsonStr.replace(/,\s*([}\]])/g, '$1');
+        return JSON.parse(jsonStr);
+      } catch(e3) {
+        throw new Error('JSON parse failed: ' + e.message + ' | ' + e3.message);
+      }
+    }
+  }
+}
+// ===== BRAND NAME HELPERS (localStorage) =====
+const BRAND_KEY = 'boodpet_brands';
+
+function getBrands() {
+  try { return JSON.parse(localStorage.getItem(BRAND_KEY) || '[]'); } catch(e) { return []; }
+}
+
+function saveBrand(name) {
+  if (!name) return;
+  const brands = getBrands();
+  const cleaned = name.trim();
+  if (!cleaned) return;
+  const idx = brands.findIndex(b => b.toLowerCase() === cleaned.toLowerCase());
+  if (idx > -1) brands.splice(idx, 1);
+  brands.unshift(cleaned);
+  if (brands.length > 20) brands.splice(20);
+  localStorage.setItem(BRAND_KEY, JSON.stringify(brands));
+}
+
+function onBrandInput(val) {
+  const dropdown = document.getElementById('brandDropdown');
+  const brands = getBrands();
+  const filtered = val.trim()
+    ? brands.filter(b => b.toLowerCase().includes(val.toLowerCase()))
+    : brands;
+  if (!filtered.length) { dropdown.style.display = 'none'; return; }
+  dropdown.innerHTML = filtered.map(b => `
+    <div onclick="selectBrand('${b.replace(/'/g,"\\'")}');event.stopPropagation()"
+      style="padding:9px 14px;font-size:13px;cursor:pointer;color:var(--text);
+             border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px;"
+      onmouseover="this.style.background='var(--surface3)'"
+      onmouseout="this.style.background=''">
+      <span style="font-size:14px">🏷️</span>${b}
+    </div>`).join('');
+  dropdown.style.display = 'block';
+}
+
+function selectBrand(name) {
+  document.getElementById('brandInput').value = name;
+  document.getElementById('brandDropdown').style.display = 'none';
+}
+
+function onBrandKeydown(e) {
+  if (e.key === 'Escape') document.getElementById('brandDropdown').style.display = 'none';
+  if (e.key === 'Enter') document.getElementById('brandDropdown').style.display = 'none';
+}
+
+document.addEventListener('click', function(e) {
+  const dd = document.getElementById('brandDropdown');
+  if (dd && !dd.contains(e.target) && e.target.id !== 'brandInput') dd.style.display = 'none';
+});
+
+// ===== IMAGE UPLOAD HELPERS =====
+function triggerUpload(inputId) {
+  document.getElementById(inputId).click();
+}
+
+function handleImgUpload(input, previewId, stateVar) {
+  const files = Array.from(input.files);
+  const maxCount = 5;
+  const currentArr = window[stateVar] || [];
+  const remaining = maxCount - currentArr.length;
+  const toAdd = files.slice(0, remaining);
+
+  toAdd.forEach(file => {
+    const reader = new FileReader();
+    reader.onload = e => {
+      // Compress image
+      compressImage(e.target.result, 400, 0.5, compressed => {
+        window[stateVar].push({ base64: compressed, name: file.name, type: file.type });
+        renderPreviews(previewId, stateVar);
+      });
+    };
+    reader.readAsDataURL(file);
+  });
+  input.value = '';
+}
+
+function compressImage(dataUrl, maxSize, quality, callback) {
+  const img = new Image();
+  img.onload = () => {
+    let w = img.width, h = img.height;
+    if (w > maxSize || h > maxSize) {
+      if (w > h) { h = Math.round(h * maxSize / w); w = maxSize; }
+      else { w = Math.round(w * maxSize / h); h = maxSize; }
+    }
+    const canvas = document.createElement('canvas');
+    canvas.width = w; canvas.height = h;
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(img, 0, 0, w, h);
+    callback(canvas.toDataURL('image/jpeg', quality));
+  };
+  img.src = dataUrl;
+}
+
+function renderPreviews(previewId, stateVar) {
+  const arr = window[stateVar] || [];
+  const container = document.getElementById(previewId);
+  container.innerHTML = arr.map((img, i) => `
+    <div class="img-preview">
+      <img src="${img.base64}" alt="">
+      <button class="img-remove" onclick="removeImg('${stateVar}',${i},'${previewId}')">✕</button>
+    </div>
+  `).join('');
+  // Hide placeholder if has images
+  const inputId = previewId.replace('Previews','').replace('imgProduct','imgProduct').replace('imgAccessory','imgAccessory');
+  const placeholder = container.parentElement.querySelector('.upload-placeholder');
+  if (placeholder) placeholder.style.display = arr.length ? 'none' : '';
+}
+
+function removeImg(stateVar, idx, previewId) {
+  window[stateVar].splice(idx, 1);
+  renderPreviews(previewId, stateVar);
+}
+
+// ===== PANEL HELPERS =====
+function openListingPanel() {
+  // 竞品分析不再是前置条件——没分析也可以生成（缺数据时后端用空值）
+  document.getElementById('listingPanel').classList.add('visible');
+  // 自动展示历史品牌
+  const brands = getBrands();
+  if (brands.length > 0 && !document.getElementById('brandInput').value) {
+    onBrandInput('');
+  }
+  setTimeout(() => document.getElementById('brandInput').focus(), 100);
+}
+function closeListingPanel() {
+  document.getElementById('listingPanel').classList.remove('visible');
+  // 用户取消时清掉重写 intent（仅"点开始生成"时由 generateListing 自行消费并清掉）
+  // 这里通过检查：如果是用户主动点取消（不是 generateListing 内部 close），就清
+  // 简化：所有 close 都不清 — 让 generateListing 自己消费 intent；用户取消后下次重开还能保持
+  // 但为安全起见，如果面板关闭后 1.5s 内没有 generateListing 调用，自动清
+  setTimeout(() => {
+    if (!(window._actionLocks && window._actionLocks.listingOp)) {
+      window._listingFullRewriteIntent = false;
+    }
+  }, 1500);
+}
+function toggleAplusOptions() {
+  const enabled = document.getElementById('aplusEnabled').checked;
+  document.getElementById('aplusOptions').style.display = enabled ? 'block' : 'none';
+}
+  
+function openImagePanel() {
+  // 竞品分析不再是前置条件——没分析也可以生成（缺数据时后端用空值）
+  // Reuse listing images if available
+  const notice = document.getElementById('imageProductReuseNotice');
+  if (window.productImgs.length > 0 && window.imgProductImgs.length === 0) {
+    window.imgProductImgs = [...window.productImgs];
+    renderPreviews('imgProductPreviews', 'imgProductImgs');
+    notice.style.display = 'block';
+  } else {
+    notice.style.display = 'none';
+  }
+  if (window.accessoryImgs.length > 0 && window.imgAccessoryImgs.length === 0) {
+    window.imgAccessoryImgs = [...window.accessoryImgs];
+    renderPreviews('imgAccessoryPreviews', 'imgAccessoryImgs');
+  }
+  document.getElementById('imagePanel').classList.add('visible');
+}
+function closeImagePanel() {
+  document.getElementById('imagePanel').classList.remove('visible');
+}
+
+// ===== ANALYSIS =====
+function startAnalysis() {
+  const input = document.getElementById('asinInput').value.trim();
+  const site  = document.getElementById('siteSelect').value;
+  if (!input) { showError('请输入 ASIN 或亚马逊链接'); return; }
+
+  // 防双击：已在分析中则忽略后续点击
+  if (!acquireLock('startAnalysis')) return;
+
+  hideError();
+  // 用户在别的 tab 时点开始分析 → 切回竞品分析 tab 看到 loading
+  switchMainTab('analysis');
+  // 分析期间隐藏空状态，由 loadingWrap 接管显示
+  hideEmptyState('analysis');
+  document.getElementById('results').classList.remove('visible');
+  document.getElementById('results').innerHTML = '';
+  document.getElementById('loadingWrap').classList.add('visible');
+  document.getElementById('analyzeBtn').disabled = true;
+  document.getElementById('actionZone').classList.remove('visible');
+  document.getElementById('listingOutput').classList.remove('visible');
+  document.getElementById('listingOutput').innerHTML = '';
+  document.getElementById('imageOutput').classList.remove('visible');
+  document.getElementById('imageOutput').innerHTML = '';
+  document.getElementById('actionStatus').innerHTML = '';
+  currentData = null;
+
+  const steps = document.querySelectorAll('.loading-steps .step');
+  steps.forEach(s => { s.classList.remove('done'); s.querySelector('.step-icon').textContent = '⏳'; });
+  let si = 0;
+  const timer = setInterval(() => {
+    if (si < steps.length - 1) {
+      steps[si].classList.add('done');
+      steps[si].querySelector('.step-icon').textContent = '✅';
+      si++;
+    }
+  }, 9000);
+
+  fetch(ANALYSIS_WEBHOOK, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ url: input, marketplace: site })
+  })
+  .then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.text(); })
+  .then(text => {
+    let data;
+    try {
+      data = JSON.parse(text);
+    } catch(e) {
+      // 清理弯引号和特殊字符后重试
+      const cleaned = text
+        .replace(/\u201c|\u201d/g, '"')
+        .replace(/\u2018|\u2019/g, "'")
+        .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, '')
+        .replace(/,(\s*[}\]])/g, '$1');
+      try { data = JSON.parse(cleaned); } catch(e2) { throw new Error('JSON parse failed: ' + e2.message); }
+    }
+    clearInterval(timer);
+    steps.forEach(s => { s.classList.add('done'); s.querySelector('.step-icon').textContent = '✅'; });
+    setTimeout(() => {
+      document.getElementById('loadingWrap').classList.remove('visible');
+      document.getElementById('analyzeBtn').disabled = false;
+      const d = Array.isArray(data) ? data[0] : data;
+      if (d.status === 'success' || d.product_name || d.asin) {
+        currentData = d;
+        renderResults(d);
+        document.getElementById('actionZone').classList.add('visible');
+        hideEmptyState('analysis');  // 分析有结果，保持空提示隐藏
+      } else {
+        showError(d.error || '分析失败，请检查 ASIN 是否正确');
+        showEmptyState('analysis');  // 失败回退到空状态（提示重新输 ASIN）
+      }
+    }, 600);
+  })
+  .catch(e => {
+    clearInterval(timer);
+    document.getElementById('loadingWrap').classList.remove('visible');
+    document.getElementById('analyzeBtn').disabled = false;
+    showError('请求失败: ' + e.message);
+    showEmptyState('analysis');  // 失败恢复空状态
+  })
+  .finally(() => { releaseLock('startAnalysis'); });
+}
+
+// ===== GENERATE FULL REPORT =====
+function generateFullReport() {
+  if (!currentData) { showError('请先完成分析'); return; }
+
+  const container = document.getElementById('fullReportContainer');
+  if (!container) return;
+
+  // 防双击：报告生成中再点 🔄 重试 直接忽略
+  if (!acquireLock('generateFullReport')) return;
+
+  container.innerHTML = `
+    <div style="text-align:center;padding:60px 20px">
+      <div class="spinner-lg"></div>
+      <div style="font-size:13px;font-weight:700;margin-top:18px;color:var(--text)">Claude 正在撰写完整报告</div>
+      <div style="font-size:12px;color:var(--sub);margin-top:6px">约需 60-90 秒，请稍候...</div>
+    </div>`;
+
+  fetch(REPORT_WEBHOOK, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(currentData)
+  })
+  .then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.text(); })
+  .then(text => {
+    let data;
+    try {
+      data = JSON.parse(text);
+    } catch(e) {
+      const cleaned = text
+        .replace(/\u201c|\u201d/g, '"')
+        .replace(/\u2018|\u2019/g, "'")
+        .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, '')
+        .replace(/,(\s*[}\]])/g, '$1');
+      try { data = JSON.parse(cleaned); } catch(e2) { throw new Error('JSON parse failed: ' + e2.message); }
+    }
+    const d = Array.isArray(data) ? data[0] : data;
+    const report = d && d.full_report ? d.full_report : '';
+    if (!report) throw new Error('响应中未返回 full_report 字段');
+
+    currentData.full_report = report;
+    renderResults(currentData);
+    switchTab('report');
+  })
+  .catch(e => {
+    const c = document.getElementById('fullReportContainer');
+    if (!c) return;
+    c.innerHTML = `
+      <div style="text-align:center;padding:48px 20px">
+        <div style="font-size:40px;margin-bottom:14px">❌</div>
+        <div style="font-size:13px;color:var(--red);font-weight:700;margin-bottom:8px">生成失败</div>
+        <div style="font-size:12px;color:var(--sub);line-height:1.7;margin-bottom:20px;max-width:440px;margin-left:auto;margin-right:auto">${escHtml(e.message)}</div>
+        <button class="btn btn-purple" onclick="generateFullReport()">🔄 重试</button>
+      </div>`;
+  })
+  .finally(() => { releaseLock('generateFullReport'); });
+}
+
+// ===== GENERATE LISTING =====
+function generateListing() {
+  const brandName = document.getElementById('brandInput').value.trim();
+  if (!brandName) {
+    document.getElementById('brandInput').focus();
+    document.getElementById('brandInput').style.borderColor = 'var(--red)';
+    setTimeout(() => document.getElementById('brandInput').style.borderColor = '', 2000);
+    alert('请输入品牌名称！');
+    return;
+  }
+  // 防双击 + 互斥：和 reviseListing 共用同一把锁，确保两者不会并发
+  if (!acquireLock('listingOp')) return;
+  const advantageDesc = document.getElementById('advantageInput').value.trim();
+  // 检测是否从"全部重写"入口进入（intent 用一次就清掉）
+  const isFullRewrite = !!(window._listingFullRewriteIntent && window.lastListingResult);
+  window._listingFullRewriteIntent = false;
+
+  const btn = document.getElementById('listingSubmitBtn');
+  btn.disabled = true;
+  btn.textContent = '⏳ 生成中...';
+  const opLabel = isFullRewrite ? '全部重写' : '生成';
+  setStatus(`<span class="spinner-sm"></span> 正在${opLabel} Listing，约需 30-50 秒...`);
+  showGeneratingState('listing', `AI 正在${isFullRewrite ? '全部重写' : '创作'} Listing 文案`);
+
+  const site = document.getElementById('siteSelect').value;
+  const payload = {
+    asin: currentData?.asin || '',
+    marketplace: site,
+    product_name: currentData?.product_name || '',
+    category: currentData?.category_rank || '',
+    keywords: currentData?.keywords || [],
+    pain_points: currentData?.pain_points || [],
+    competitors: currentData?.competitors || [],
+    user_portrait: currentData?.user_portrait || {},
+    price: currentData?.price || 0,
+    full_report: currentData?.full_report || '',
+    advantage_description: advantageDesc,
+    brand_name: brandName,
+    has_accessories: window.accessoryImgs.length > 0,
+    product_images: window.productImgs.map(i => i.base64),
+    accessory_images: window.accessoryImgs.map(i => i.base64),
+    product_images_count: window.productImgs.length,
+    accessory_images_count: window.accessoryImgs.length
+  };
+  // 全部重写：告诉后端这是 rewrite，传上次结果做上下文
+  if (isFullRewrite) {
+    payload.revision_mode = 'full';
+    payload.previous_result = window.lastListingResult;
+    payload.revision_feedback = {
+      overall: advantageDesc || 'Take a completely different angle / style for this product. The previous version was not satisfactory.'
+    };
+  }
+
+  closeListingPanel();
+
+  fetch(LISTING_WEBHOOK, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
+  })
+  .then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.text(); })
+  .then(text => { const data = safeParseJson(text);
+    btn.disabled = false;
+    btn.textContent = '🚀 开始生成 Listing';
+    setStatus(`<span style="color:var(--green)">✅ Listing ${opLabel}完成</span>`);
+    saveBrand(brandName);
+    const d = Array.isArray(data) ? data[0] : data;
+    window.lastListingResult = d;
+    pushListingHistory(d, isFullRewrite ? 'full' : 'initial');
+    if (isFullRewrite) window.reviseFields = {};  // 重写完毕清掉局部标记
+    hideGeneratingState('listing');
+    renderListing(d);
+    showToast(`Listing ${opLabel}完成`, isFullRewrite ? '已基于上次结果换角度重写，可继续局部修改' : '已为你创作完整 listing，可在下方修改局部字段或全部重写', 'success');
+  })
+  .catch(e => {
+    btn.disabled = false;
+    btn.textContent = '🚀 开始生成 Listing';
+    setStatus(`<span style="color:var(--red)">❌ ${opLabel}失败: ${e.message}</span>`);
+    hideGeneratingState('listing');
+    // 失败后恢复空状态，让用户能再点按钮重试
+    showEmptyState('listing');
+    showToast(`Listing ${opLabel}失败`, e.message, 'error');
+  })
+  .finally(() => { releaseLock('listingOp'); });
+}
+
+// ===== LISTING 局部修改 / 全部重写 =====
+function reviseListing(revisionMode, revisionFeedback) {
+  // 不再要求竞品分析作为前置；只要有上一次的 listing 结果就能改
+  if (!window.lastListingResult) { showError('请先生成 Listing'); return; }
+  // 共用 listingOp 锁：和 generateListing 互斥，避免两个请求并发覆盖结果
+  if (!acquireLock('listingOp')) return;
+
+  const modeLabel = revisionMode === 'full' ? '全部重写' : '修改';
+  // 顶部全局状态
+  setStatus(`<span class="spinner-sm"></span> 正在${modeLabel} Listing，约需 30-50 秒...`);
+
+  // 内联状态条 + 按钮变为加载态（让用户在卡片底部点完按钮也能立刻看到反馈）
+  const partialBtn = document.getElementById('partialReviseBtn');
+  const fullBtn    = document.getElementById('fullRewriteBtn');
+  const statusEl   = document.getElementById('reviseStatus');
+  const startedAt  = Date.now();
+  let elapsedTimer = null;
+
+  if (partialBtn) {
+    partialBtn.dataset.origText = partialBtn.textContent;
+    partialBtn.disabled = true;
+    if (revisionMode === 'partial') partialBtn.textContent = '⏳ 修改中...';
+  }
+  if (fullBtn) {
+    fullBtn.dataset.origText = fullBtn.textContent;
+    fullBtn.disabled = true;
+    if (revisionMode === 'full') fullBtn.textContent = '⏳ 重写中...';
+  }
+  if (statusEl) {
+    statusEl.className = 'revise-status show busy';
+    statusEl.innerHTML = `<span class="spinner-sm"></span><span>正在${modeLabel}... 0s</span>`;
+    elapsedTimer = setInterval(() => {
+      const sec = Math.floor((Date.now() - startedAt) / 1000);
+      const span = statusEl.querySelector('span:last-child');
+      if (span) span.textContent = `正在${modeLabel}... ${sec}s`;
+    }, 1000);
+  }
+
+  const restoreUI = (statusHtml, statusType) => {
+    if (elapsedTimer) clearInterval(elapsedTimer);
+    if (partialBtn) {
+      partialBtn.disabled = false;
+      partialBtn.textContent = partialBtn.dataset.origText || '📝 提交修改';
+    }
+    if (fullBtn) {
+      fullBtn.disabled = false;
+      fullBtn.textContent = fullBtn.dataset.origText || '🔄 全部重写';
+    }
+    if (statusEl) {
+      statusEl.className = 'revise-status show ' + statusType;
+      statusEl.innerHTML = statusHtml;
+      // 成功状态 5 秒后自动淡出
+      if (statusType === 'success') {
+        setTimeout(() => { if (statusEl) statusEl.className = 'revise-status'; }, 5000);
+      }
+    }
+    // 内联状态走完后刷新当前标记计数 UI（按钮 disabled 状态需要 refreshReviseUI 重设）
+    refreshReviseUI();
+  };
+
+  const payload = {
+    asin: currentData?.asin || '',
+    marketplace: document.getElementById('siteSelect').value,
+    product_name: currentData?.product_name || '',
+    category: currentData?.category_rank || '',
+    keywords: currentData?.keywords || [],
+    pain_points: currentData?.pain_points || [],
+    competitors: currentData?.competitors || [],
+    user_portrait: currentData?.user_portrait || {},
+    price: currentData?.price || 0,
+    full_report: currentData?.full_report || '',
+    brand_name: document.getElementById('brandInput')?.value?.trim() || '',
+    advantage_description: document.getElementById('advantageInput')?.value?.trim() || '',
+    has_accessories: window.accessoryImgs.length > 0,
+    product_images: [],
+    accessory_images: [],
+    product_images_count: window.productImgs.length,
+    accessory_images_count: window.accessoryImgs.length,
+    revision_mode: revisionMode,
+    previous_result: window.lastListingResult,
+    revision_feedback: revisionFeedback
+  };
+
+  fetch(LISTING_WEBHOOK, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
+  })
+  .then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.text(); })
+  .then(text => {
+    const data = safeParseJson(text);
+    const d = Array.isArray(data) ? data[0] : data;
+    window.lastListingResult = d;
+    window.reviseFields = {};  // 提交成功后清空标记
+    pushListingHistory(d, revisionMode, revisionFeedback);
+    const usedSec = Math.floor((Date.now() - startedAt) / 1000);
+    renderListing(d);
+    setStatus(`<span style="color:var(--green)">✅ Listing ${modeLabel}完成（耗时 ${usedSec}s）</span>`);
+    // renderListing 会重建 reviseBar，此处再拿一次新 DOM 设置成功状态
+    const newStatusEl = document.getElementById('reviseStatus');
+    if (newStatusEl) {
+      newStatusEl.className = 'revise-status show success';
+      newStatusEl.innerHTML = `✅ ${modeLabel}完成（耗时 ${usedSec}s）`;
+      setTimeout(() => { if (newStatusEl) newStatusEl.className = 'revise-status'; }, 5000);
+    }
+    if (elapsedTimer) clearInterval(elapsedTimer);
+    // 右上角弹出 toast，让用户立刻知道操作完成
+    showToast(`Listing ${modeLabel}完成`, `耗时 ${usedSec}s，新版本已更新到下方`, 'success');
+  })
+  .catch(e => {
+    setStatus(`<span style="color:var(--red)">❌ ${modeLabel}失败: ${e.message}</span>`);
+    restoreUI(`❌ ${modeLabel}失败: ${e.message}`, 'error');
+    showToast(`${modeLabel}失败`, e.message, 'error');
+  })
+  .finally(() => { releaseLock('listingOp'); });
+}
+
+// 收集已标记的字段，构造 partial 提交的 revision_feedback
+function submitPartialRevise() {
+  const keys = ['title','bullet_1','bullet_2','bullet_3','bullet_4','bullet_5','description','search_terms'];
+  const marked = keys.filter(k => window.reviseFields[k] && window.reviseFields[k].revise);
+  if (marked.length === 0) {
+    alert('请先点击某个字段右侧的 ✏️ 标记修改 按钮，填写修改意见。');
+    return;
+  }
+  const feedback = {};
+  keys.forEach(k => {
+    feedback[k] = window.reviseFields[k] && window.reviseFields[k].revise
+      ? { revise: true, note: (window.reviseFields[k].note || '').trim() }
+      : { revise: false, note: '' };
+  });
+  reviseListing('partial', feedback);
+}
+
+// 全部重写：打开自定义弹窗收集多行整体方向
+// 🔄 全部重写：打开 Listing 面板，让用户调整品牌名 / 卖点描述 后再点开始生成
+// 设置 intent 标志，generateListing 提交时会带上 revision_mode='full' + previous_result
+function submitFullRewrite() {
+  if (window._actionLocks && window._actionLocks.listingOp) {
+    alert('正在生成中，请等待当前任务完成');
+    return;
+  }
+  window._listingFullRewriteIntent = true;
+  openListingPanel();
+  showToast('💡 调整后点开始生成', '可在"核心卖点"里告诉 AI 这次想换什么角度（例如：风格更冲击力 / 主打性价比）。点 🚀 开始生成 Listing 即重写全部', 'info');
+}
+
+// 旧的自定义重写弹窗保留兼容（如果旧 DOM 还有 onclick=closeRewriteModal 之类调用）
+function closeRewriteModal() {
+  const modal = document.getElementById('rewriteModal');
+  if (modal) modal.style.display = 'none';
+}
+function confirmRewrite() {
+  // 老入口：直接关掉弹窗（保留兼容；功能已合并到 submitFullRewrite + openListingPanel）
+  closeRewriteModal();
+}
+
+// 展开 / 收起字段的修改输入面板
+function openReviseField(fieldKey) {
+  const panel = document.getElementById('rp_' + fieldKey);
+  if (!panel) return;
+  panel.classList.toggle('open');
+  if (panel.classList.contains('open')) {
+    const ta = panel.querySelector('textarea');
+    if (ta) {
+      ta.value = (window.reviseFields[fieldKey] && window.reviseFields[fieldKey].note) || '';
+      setTimeout(() => ta.focus(), 50);
+    }
+  }
+}
+
+// 保存某字段的修改意见
+function saveReviseField(fieldKey) {
+  const ta = document.getElementById('rt_' + fieldKey);
+  const note = (ta?.value || '').trim();
+  if (!note) {
+    alert('请填写修改意见再保存');
+    if (ta) ta.focus();
+    return;
+  }
+  window.reviseFields[fieldKey] = { revise: true, note };
+  const panel = document.getElementById('rp_' + fieldKey);
+  if (panel) panel.classList.remove('open');
+  refreshReviseUI();
+}
+
+// 取消某字段的标记
+function cancelReviseField(fieldKey) {
+  delete window.reviseFields[fieldKey];
+  const panel = document.getElementById('rp_' + fieldKey);
+  if (panel) panel.classList.remove('open');
+  refreshReviseUI();
+}
+
+// 根据 window.reviseFields 更新每个字段的视觉标记 + 底部计数 + 按钮可用性
+function refreshReviseUI() {
+  const keys = ['title','bullet_1','bullet_2','bullet_3','bullet_4','bullet_5','description','search_terms'];
+  let markedCount = 0;
+  keys.forEach(k => {
+    const wrap = document.getElementById('rw_' + k);
+    const btn = document.getElementById('rb_' + k);
+    if (!wrap || !btn) return;
+    const marked = !!(window.reviseFields[k] && window.reviseFields[k].revise);
+    wrap.classList.toggle('revise-marked', marked);
+    btn.textContent = marked ? '✏️ 已标记' : '✏️ 修改';
+    btn.title = marked ? `修改意见：${window.reviseFields[k].note}（点击编辑 / 取消）` : '标记此字段需要修改';
+    if (marked) markedCount++;
+  });
+  const cnt = document.getElementById('reviseCount');
+  if (cnt) cnt.textContent = markedCount > 0 ? `已标记 ${markedCount} 处修改` : '尚未标记任何字段';
+  const submitBtn = document.getElementById('partialReviseBtn');
+  if (submitBtn) submitBtn.disabled = markedCount === 0;
+}
+
+function renderListing(d) {
+  // 文案已生成 → 隐藏 listing tab 的空提示
+  hideEmptyState('listing');
+  const el = document.getElementById('listingOutput');
+  const title = d.title || '';
+  const bullets = Array.isArray(d.bullet_points) ? d.bullet_points : [];
+  const desc = d.description || d.product_description || '';
+  const searchTerms = d.search_terms || d.backend_keywords || '';
+  const subject = Array.isArray(d.subject_matter) ? d.subject_matter.join('\n') : (d.subject_matter || '');
+  const reasons = d.reasons || {};
+  const kwsUsed = d.keywords_used || [];
+
+  // 关键词高亮函数：把文本中出现的关键词用颜色标注
+  function highlightKws(text, kws) {
+    if (!kws.length) return escHtml(text);
+    let result = escHtml(text);
+    // 按长度降序排序，优先匹配长词
+    const sorted = [...kws].sort((a,b) => b.length - a.length);
+    sorted.forEach((kw, idx) => {
+      const cls = idx < 3 ? 'kw-hl-high' : idx < 7 ? 'kw-hl-med' : 'kw-hl-low';
+      const escaped = kw.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const re = new RegExp('(' + escaped + ')', 'gi');
+      result = result.replace(re, `<span class="${cls}">$1</span>`);
+    });
+    return result;
+  }
+
+  // 解析写作说明文本，生成结构化中文展示
+  function buildReasonHtml(rawReason, type) {
+    if (!rawReason) return '';
+
+    // 根据类型生成不同结构的说明
+    let sections = [];
+
+    if (type === 'title') {
+      sections = [
+        {
+          icon: '📝',
+          title: '标题结构逻辑',
+          body: rawReason
+        },
+        {
+          icon: '🔍',
+          title: '算法适配说明',
+          body: null,
+          algo: true
+        }
+      ];
+    } else if (type === 'bullets') {
+      sections = [
+        {
+          icon: '🎯',
+          title: '五行排序逻辑',
+          body: rawReason
+        },
+        {
+          icon: '🔍',
+          title: '算法适配说明',
+          body: null,
+          algo: true
+        }
+      ];
+    } else if (type === 'search_terms') {
+      sections = [
+        {
+          icon: '🔑',
+          title: '搜索词布局逻辑',
+          body: rawReason
+        }
+      ];
+    } else if (type === 'description') {
+      sections = [
+        {
+          icon: '📖',
+          title: '详情页文案逻辑',
+          body: rawReason
+        }
+      ];
+    }
+
+    const algoHtml = `
+      <div class="lf-reason-section">
+        <div class="lf-reason-section-title">🤖 三大算法适配</div>
+        <div class="lf-reason-section-body">
+          <div class="algo-tags">
+            <span class="algo-tag algo-a9">A9 关键词排名算法</span>
+            <span class="algo-tag algo-cosmo">Cosmo 语义理解</span>
+            <span class="algo-tag algo-rufus">Rufus 问答推荐</span>
+          </div>
+          <div style="margin-top:8px;font-size:11px;color:var(--sub);line-height:1.7">
+            <b style="color:var(--text)">A9：</b>核心关键词前置，覆盖高搜索量词，提升自然排名权重<br>
+            <b style="color:var(--text)">Cosmo：</b>完整语义表达（材质+场景+人群），帮助系统理解商品用途，提升推荐准确度<br>
+            <b style="color:var(--text)">Rufus：</b>加入使用场景短语（如"suitable for..."），适配自然语言问答推荐入口
+          </div>
+        </div>
+      </div>`;
+
+    const sectionsHtml = sections.map(s => {
+      if (s.algo) return algoHtml;
+      return `
+        <div class="lf-reason-section">
+          <div class="lf-reason-section-title">${s.icon} ${s.title}</div>
+          <div class="lf-reason-section-body">${escHtml(s.body || '')}</div>
+        </div>`;
+    }).join('');
+
+    return `
+      <div class="lf-reason">
+        <div class="lf-reason-header">💡 写作说明</div>
+        <div class="lf-reason-body">${sectionsHtml}</div>
+      </div>`;
+  }
+
+  // 关键词图例
+  const kwLegend = kwsUsed.length ? `
+    <div class="kw-legend">
+      <div class="kw-legend-item"><div class="kw-legend-dot" style="background:rgba(243,156,18,.5)"></div>核心高搜索量词</div>
+      <div class="kw-legend-item"><div class="kw-legend-dot" style="background:rgba(47,129,247,.5)"></div>中等搜索量词</div>
+      <div class="kw-legend-item"><div class="kw-legend-dot" style="background:rgba(63,185,80,.4)"></div>长尾精准词</div>
+    </div>` : '';
+
+  // 关键词芯片
+  const kwChips = kwsUsed.length ? `
+    <div class="kw-used">
+      <span class="kw-used-label">嵌入关键词：</span>
+      ${kwsUsed.map((k, i) => {
+        const cls = i < 3 ? 'kw-chip-high' : i < 7 ? 'kw-chip-med' : 'kw-chip-low';
+        return `<span class="kw-chip ${cls}">${escHtml(k)}</span>`;
+      }).join('')}
+    </div>
+    ${kwLegend}` : '';
+
+  // 构造每个可修改字段的内嵌"修改意见"输入面板
+  const buildReviseUI = (fieldKey, placeholder) => `
+    <div class="revise-panel" id="rp_${fieldKey}">
+      <div class="revise-head">✏️ 修改意见<span style="font-weight:400;color:var(--muted);font-size:10px;margin-left:6px">填得越具体越好，AI 会按此方向重写该字段</span></div>
+      <textarea class="revise-ta" id="rt_${fieldKey}" placeholder="${placeholder || '例如：要强调加厚3mm材质 / 加入宠物家庭场景'}"></textarea>
+      <div class="revise-acts">
+        <button class="btn btn-purple btn-xs" onclick="saveReviseField('${fieldKey}')">💾 保存标记</button>
+        <button class="btn btn-ghost btn-xs" onclick="cancelReviseField('${fieldKey}')">↩ 取消标记</button>
+        <button class="btn btn-ghost btn-xs" onclick="openReviseField('${fieldKey}')">关闭</button>
+      </div>
+    </div>`;
+
+  // 标题字段
+  const titleHtml = title ? `
+    <div class="listing-field" id="rw_title">
+      <div class="lf-label">📌 TITLE（标题）</div>
+      <div class="lf-content" id="listingTitle" style="line-height:1.8">${highlightKws(title, kwsUsed)}<button class="btn-revise" id="rb_title" onclick="openReviseField('title')">✏️ 修改</button><button class="copy-btn" onclick="copyField('listingTitle')">复制</button></div>
+      ${buildReviseUI('title')}
+      ${buildReasonHtml(reasons.title, 'title')}
+    </div>` : '';
+
+  // 五行描述（每行独立可修改）
+  const bulletsHtml = bullets.length ? `
+    <div class="listing-field">
+      <div class="lf-label">🔹 BULLET POINTS（五行描述）</div>
+      <div class="lf-content" id="listingBullets" style="white-space:normal">
+        <ul class="lf-bullets">
+          ${bullets.map((b, i) => {
+            const text = typeof b === 'string' ? b : (b.text || JSON.stringify(b));
+            const k = 'bullet_' + (i+1);
+            return `<li id="rw_${k}" class="bullet-li">
+              <span class="mono" style="color:var(--accent);font-size:10px;margin-right:6px">B${i+1}</span>${highlightKws(text, kwsUsed)}
+              <button class="btn-revise btn-revise-inline" id="rb_${k}" onclick="openReviseField('${k}')">✏️ 修改</button>
+              ${buildReviseUI(k, '例如：要强调材质 / 换个角度突出 ...')}
+            </li>`;
+          }).join('')}
+        </ul>
+        <button class="copy-btn" onclick="copyField('listingBullets')">复制</button>
+      </div>
+      ${buildReasonHtml(reasons.bullets, 'bullets')}
+    </div>` : '';
+
+  // 搜索词字段
+  const searchHtml = searchTerms ? `
+    <div class="listing-field" id="rw_search_terms">
+      <div class="lf-label">🔍 SEARCH TERMS（后台搜索词）</div>
+      <div class="lf-content" id="listingSearch">${highlightKws(searchTerms, kwsUsed)}<button class="btn-revise" id="rb_search_terms" onclick="openReviseField('search_terms')">✏️ 修改</button><button class="copy-btn" onclick="copyField('listingSearch')">复制</button></div>
+      ${buildReviseUI('search_terms', '例如：补充长尾词 / 删掉某些词 ...')}
+      ${buildReasonHtml(reasons.search_terms, 'search_terms')}
+    </div>` : '';
+
+  // 产品描述
+  const descHtml = desc ? `
+    <div class="listing-field" id="rw_description">
+      <div class="lf-label">📝 DESCRIPTION（产品描述）</div>
+      <div class="lf-content" id="listingDesc" style="white-space:normal">${desc}<button class="btn-revise" id="rb_description" onclick="openReviseField('description')">✏️ 修改</button><button class="copy-btn" onclick="copyField('listingDesc')">复制</button></div>
+      ${buildReviseUI('description', '例如：开头要更有冲击力 / 加 FAQ 段 ...')}
+      ${buildReasonHtml(reasons.description, 'description')}
+    </div>` : '';
+
+  // Subject matter（不可单独修改：本质是 title/bullets 关键词的提取，跟着上游变即可）
+  const subjectHtml = subject ? `
+    <div class="listing-field">
+      <div class="lf-label">📎 SUBJECT MATTER</div>
+      <div class="lf-content" id="listingSubject">${escHtml(subject)}<button class="copy-btn" onclick="copyField('listingSubject')">复制</button></div>
+    </div>` : '';
+
+  // 底部修改操作栏
+  const reviseBar = `
+    <div class="revise-bar">
+      <div class="revise-bar-info">
+        <span style="font-size:11px;color:var(--sub)">💡 点击任意字段右侧的 ✏️ 修改 标记需要重写的部分</span>
+        <span id="reviseCount" style="font-size:11px;color:var(--accent3);font-weight:600;margin-left:10px">尚未标记任何字段</span>
+        <span id="reviseStatus" class="revise-status"></span>
+      </div>
+      <div class="revise-bar-actions">
+        <button class="btn btn-purple btn-sm" id="partialReviseBtn" onclick="submitPartialRevise()" disabled>📝 提交修改</button>
+        <button class="btn btn-ghost btn-sm" id="fullRewriteBtn" onclick="submitFullRewrite()">🔄 全部重写</button>
+      </div>
+    </div>`;
+
+  // 版本历史按钮 + 面板（只有 2 个以上版本才显示）
+  const histCount = window.listingHistory.length;
+  const histBtn = histCount >= 2
+    ? `<button class="btn btn-xs btn-ghost" onclick="toggleHistoryPanel()" title="查看历史版本，可一键回退">📜 历史 (${histCount})</button>`
+    : '';
+
+  // 历史面板 HTML（最新在上）
+  const histItems = histCount >= 2 ? window.listingHistory.map((h, i) => {
+    const isCurrent = i === window.currentHistoryIdx;
+    const titlePreview = (h.result.title || '(无标题)').slice(0, 70);
+    return `
+      <div class="history-item ${isCurrent ? 'is-current' : ''}">
+        <div class="history-row1">
+          <span class="history-time">${formatRelativeTime(h.timestamp)}</span>
+          <span class="history-badge history-badge-${h.mode}">${listingModeLabel(h.mode)}</span>
+          ${isCurrent ? '<span class="history-current-tag">✓ 当前显示</span>' : ''}
+        </div>
+        <div class="history-title">${escHtml(titlePreview)}${(h.result.title || '').length > 70 ? '...' : ''}</div>
+        ${!isCurrent ? `<button class="btn btn-xs btn-purple" onclick="restoreListingVersion(${i})">🔁 回退到此版本</button>` : ''}
+      </div>`;
+  }).reverse().join('') : '';
+
+  const histPanel = histCount >= 2 ? `
+    <div id="historyPanel" class="history-panel">
+      <div class="history-head">📜 文案版本历史（共 ${histCount} 个版本，最多保留最近 ${LISTING_HISTORY_MAX} 个）</div>
+      <div class="history-list">${histItems}</div>
+    </div>` : '';
+
+  el.innerHTML = `
+    <div class="listing-card fade-in">
+      <div class="listing-card-header">
+        <h3>✍️ Listing 文案（AI 生成）</h3>
+        <div style="display:flex;gap:6px;align-items:center">
+          ${histBtn}
+          <button class="btn btn-xs btn-ghost" onclick="copyAllListing()">📋 复制全部</button>
+        </div>
+      </div>
+      ${histPanel}
+      <div class="listing-body" id="listingBody">
+        ${titleHtml}
+        ${kwChips}
+        ${bulletsHtml}
+        ${descHtml}
+        ${searchHtml}
+        ${subjectHtml}
+        ${reviseBar}
+      </div>
+    </div>`;
+
+  el.classList.add('visible');
+  el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  // 渲染完毕后根据已有标记同步 UI 状态
+  refreshReviseUI();
+}
+
+// 🔄 全部重新生成图片：打开图片面板，让用户调整模型/风格/A+等设置后再点开始生成
+function regenerateAllImages() {
+  if (window._actionLocks && window._actionLocks.generateImages) {
+    alert('正在生成中，请等待当前任务完成');
+    return;
+  }
+  openImagePanel();
+  showToast('💡 调整设置后点开始生成', '可修改产品图 / 模型 / 风格描述 / A+ 数量等，点 🚀 开始生成图片 即清空当前图片并重做', 'info');
+}
+
+// ===== GENERATE IMAGES (plan + generate two-step flow) =====
+async function generateImages() {
+  if (window.imgProductImgs.length === 0) {
+    alert('请至少上传1张主产品图片，用于图生图参考！');
+    return;
+  }
+  // 防双击：生图中再点 开始/重试 直接忽略
+  if (!acquireLock('generateImages')) return;
+  // 图片任务一启动 → 显示 "AI 正在策划" 大卡片状态（替代之前的小 spinner）
+  showGeneratingState('images');
+  try {
+  const btn = document.getElementById('imageSubmitBtn');
+  btn.disabled = true;
+  btn.textContent = '⏳ 生成中...';
+
+  const site = document.getElementById('siteSelect').value;
+  const styleNote = document.getElementById('imageStyleInput')?.value?.trim() || '';
+  const aplusEnabled = document.getElementById('aplusEnabled')?.checked || false;
+  const aplusCount = Number(document.getElementById('aplusCount')?.value || 5);
+
+  closeImagePanel();
+
+  const el = document.getElementById('imageOutput');
+  setStatus('<span class="spinner-sm"></span> AI正在策划图片方案...');
+
+  // ===== Step 1: 调 action:"plan" 让 Claude 策划 7 张图方案 =====
+  let planResp;
+  try {
+    const planCtrl = new AbortController();
+    const planTimer = setTimeout(() => planCtrl.abort(), 180000);
+    const r = await fetch(IMAGE_WEBHOOK, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        action: 'plan',
+        productImages: window.imgProductImgs.map(i => i.base64),
+        accessoryImages: window.imgAccessoryImgs.map(i => i.base64),
+        productName: document.getElementById('ourProductName')?.value?.trim() || currentData?.product_name || '',
+        sellingPoints: document.getElementById('advantageInput')?.value?.trim() || '',
+        marketplace: site,
+        style_note: styleNote,
+        analysisData: currentData,
+        generate_aplus: aplusEnabled,
+        aplus_count: aplusCount
+      }),
+      signal: planCtrl.signal
+    });
+    clearTimeout(planTimer);
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    planResp = safeParseJson(await r.text());
+  } catch (e) {
+    hideGeneratingState('images');
+    el.classList.add('visible');
+    el.innerHTML = `
+      <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;padding:32px;gap:12px">
+        <span style="font-size:32px">⚠️</span>
+        <span style="font-size:13px;color:var(--red)">策划失败: ${e.name === 'AbortError' ? '请求超时' : (e.message || '未知错误')}</span>
+        <button class="btn btn-green btn-sm" onclick="generateImages()">🔄 重试</button>
+      </div>`;
+    setStatus('<span style="color:var(--red)">❌ 策划失败</span>');
+    btn.disabled = false;
+    btn.textContent = '🚀 开始生成图片';
+    return;
+  }
+
+  if (!planResp || !planResp.success || !Array.isArray(planResp.plan) || planResp.plan.length === 0) {
+    hideGeneratingState('images');
+    el.classList.add('visible');
+    el.innerHTML = `
+      <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;padding:32px;gap:12px">
+        <span style="font-size:32px">⚠️</span>
+        <span style="font-size:13px;color:var(--red)">策划失败: ${(planResp && planResp.error) || '未返回有效方案'}</span>
+        <button class="btn btn-green btn-sm" onclick="generateImages()">🔄 重试</button>
+      </div>`;
+    setStatus('<span style="color:var(--red)">❌ 策划失败</span>');
+    btn.disabled = false;
+    btn.textContent = '🚀 开始生成图片';
+    return;
+  }
+  // 策划成功 → 进入第二步生图，隐藏 generating 卡片，让骨架网格显示
+  hideGeneratingState('images');
+  el.classList.add('visible');
+
+  const plan = planResp.plan;
+  const totalCount = plan.length;
+
+  // 缓存 plan 的 prompt，便于失败重试时回退到原始 prompt
+  window._imgPlan = plan;
+  if (!window._imgPrompts) window._imgPrompts = {};
+  plan.forEach((p, i) => { window._imgPrompts[i] = p.prompt || ''; });
+
+  // 用 plan 返回的 name 渲染骨架卡片
+  el.innerHTML = `
+    <div class="download-all-bar">
+      <button class="btn btn-purple btn-sm" onclick="regenerateAllImages()" title="清空当前图片，让 AI 重新策划方案并生成全部 ${totalCount} 张图">🔄 全部重新生成</button>
+      <button class="btn-download-all" id="downloadAllBtn" onclick="downloadAllImages()" disabled>💾 下载全部图片</button>
+    </div>
+    <div class="main-images-grid">${plan.map((p, i) => `
+      <div class="img-card" id="imgCard_${i}">
+        <div class="img-card-img-error" id="imgErr_${i}" style="display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;min-height:180px">
+          <span class="spinner-sm"></span>
+          <span style="font-size:12px;color:var(--sub)">等待生成...</span>
+        </div>
+        <div class="img-card-info"><div class="img-card-label">${p.name || `图${i+1}`}</div></div>
+      </div>`).join('')}</div>`;
+
+  // ===== Step 2: 并发调 action:"generate" =====
+  // 串行 7 张 ≈ 7×30s = 3.5 分钟；并发 2 张 ≈ 4×30s = 2 分钟（单用户略慢但服务器内存压力小）
+  // 并发数太高的两个风险：① n8n 容器内存压力大 OOM；② Gemini/OpenAI 速率限制（429）
+  // 5 用户并发 × 2 = 10 并发上限，4GB 服务器舒适，10 RPM 也不容易触发限流
+  const IMAGE_CONCURRENCY = 2;
+  let completed = 0, failed = 0;
+  const updateProgress = () => {
+    const done = completed + failed;
+    setStatus(`<span class="spinner-sm"></span> 并发生成中：已完成 ${done}/${totalCount}${failed > 0 ? `（失败 ${failed}）` : ''}`);
+  };
+  updateProgress();
+
+  const renderError = (idx, msg) => {
+    const e2 = document.getElementById(`imgErr_${idx}`);
+    if (e2) e2.innerHTML = `<span style="font-size:22px">🖼️</span><span style="font-size:11px;color:var(--red);max-width:90%;text-align:center">${msg}</span><button class="regen-btn" onclick="regenWithPrompt(${idx})" style="margin-top:6px">🔄 重新生成</button>`;
+  };
+
+  const generateOne = async (task, idx) => {
+    const errEl = document.getElementById(`imgErr_${idx}`);
+    if (errEl) errEl.innerHTML = `<span class="spinner-sm"></span><span style="font-size:12px;color:var(--sub)">生成中...</span>`;
+    try {
+      const ctrl = new AbortController();
+      const t = setTimeout(() => ctrl.abort(), 240000);
+      const resp = await fetch(IMAGE_WEBHOOK, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'generate',
+          productImages: window.imgProductImgs.map(i => i.base64),
+          prompt: task.prompt,
+          taskId: task.id,
+          taskName: task.name,
+          model: document.getElementById('imageModel')?.value || 'gemini'
+        }),
+        signal: ctrl.signal
+      });
+      clearTimeout(t);
+      if (!resp.ok) throw new Error('HTTP ' + resp.status);
+      const d = safeParseJson(await resp.text());
+      if (d.success && d.imageBase64) {
+        completed++;
+        const card = document.getElementById(`imgCard_${idx}`);
+        if (card) card.outerHTML = buildImgCard({
+          imageBase64: d.imageBase64,
+          taskName: d.taskName || task.name,
+          prompt: d.prompt || task.prompt,
+          modelUsed: d.modelUsed
+        }, idx);
+      } else {
+        failed++;
+        renderError(idx, d.error || '生成失败');
+      }
+    } catch(e) {
+      failed++;
+      renderError(idx, e.name === 'AbortError' ? '生成超时' : (e.message || '生成失败'));
+    } finally {
+      updateProgress();
+    }
+  };
+
+  // 工作者池：始终保持 IMAGE_CONCURRENCY 个任务在飞，谁先完成就立刻取下一个
+  let nextIdx = 0;
+  async function worker() {
+    while (true) {
+      const i = nextIdx++;
+      if (i >= totalCount) return;
+      await generateOne(plan[i], i);
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(IMAGE_CONCURRENCY, totalCount) }, worker));
+
+  btn.disabled = false;
+  btn.textContent = '🚀 开始生成图片';
+  // 根据成功比例动态选色
+  const ratio = completed / totalCount;
+  const color = ratio === 1 ? 'var(--green)' : ratio === 0 ? 'var(--red)' : 'var(--orange)';
+  const icon  = ratio === 1 ? '✅' : ratio === 0 ? '❌' : '⚠️';
+  const tail  = ratio === 1 ? '' : ratio === 0 ? '（全部失败）' : `（成功 ${completed}，失败 ${failed}）`;
+  setStatus(`<span style="color:${color}">${icon} 完成 ${completed}/${totalCount} 张${tail}</span>`);
+  // 全部生图完毕时弹 toast 提醒（用户可能在别的 tab）
+  if (ratio === 1) {
+    showToast(`图片生成完成（${totalCount} 张）`, '可下载或单张重新生成', 'success');
+  } else if (ratio === 0) {
+    showToast('图片生成全部失败', '请检查后端服务或重试', 'error');
+  } else {
+    showToast(`图片部分生成（${completed}/${totalCount}）`, `${failed} 张失败，可单独点重新生成`, 'info');
+  }
+  } finally {
+    releaseLock('generateImages');
+  }
+}
+
+function buildImgCard(img, i) {
+  const b64 = img.imageBase64 || '';
+  const label = img.taskName || `图${i+1}`;
+  const prompt = img.prompt || '';
+  if (!window._imgPrompts) window._imgPrompts = {};
+  window._imgPrompts[i] = prompt;
+  // 后端返回 modelUsed: 'gemini' 或 'gpt-image-2'，归一化为 select 的 value
+  const rawModel = (img.modelUsed || '').toString().toLowerCase();
+  const usedModel = rawModel.includes('gpt') ? 'gpt'
+                  : rawModel.includes('gemini') ? 'gemini'
+                  : (document.getElementById('imageModel')?.value || 'gemini');
+  const cardId = `imgCard_${i}`;
+  const btn = document.getElementById('downloadAllBtn');
+  if (btn) btn.disabled = false;
+  return `<div class="img-card" id="${cardId}">
+    <img class="img-card-img" src="${b64}" alt="${label}" style="cursor:zoom-in"
+      onclick="openLightbox('${cardId}')"
+      onerror="this.style.display='none';document.getElementById('imgErr_${i}').style.display='flex'">
+    <div class="img-card-img-error" id="imgErr_${i}" style="display:none">
+      <span>🖼️</span><span>图片加载失败</span>
+    </div>
+    <div class="img-card-info">
+      <div class="img-card-label">${label} <span style="font-size:10px;color:var(--muted);font-weight:400">· ${usedModel === 'gpt' ? 'GPT' : 'Gemini'}</span></div>
+      <div class="img-card-actions">
+        <a onclick="openLightbox('${cardId}')" style="cursor:pointer">🔍 放大</a>
+        <a href="${b64}" download="image_${i+1}.jpg">💾 下载</a>
+        <button class="regen-btn" onclick="togglePromptPanel(${i})">✏️ 提示词</button>
+        <button class="regen-btn" onclick="regenWithPrompt(${i})">🔄 重新生成</button>
+      </div>
+      <div class="prompt-panel" id="pp_${i}">
+        <div class="prompt-head">💡 提示词<span style="font-weight:400;color:var(--muted);font-size:10px;margin-left:6px">（可选，留空将使用默认提示词）</span></div>
+        <textarea class="prompt-ta" id="pt_${i}" placeholder="留空将使用系统默认提示词自动生成，也可在此输入自定义描述...">${prompt}</textarea>
+        <div class="prompt-acts" style="flex-wrap:wrap;gap:6px">
+          <label style="font-size:11px;color:var(--sub);display:inline-flex;align-items:center;gap:4px">
+            🤖 模型
+            <select id="pm_${i}" style="padding:4px 6px;font-size:11px;border-radius:4px;border:1px solid var(--border)">
+              <option value="gemini" ${usedModel === 'gemini' ? 'selected' : ''}>Gemini</option>
+              <option value="gpt" ${usedModel === 'gpt' ? 'selected' : ''}>GPT</option>
+            </select>
+          </label>
+          <button class="prompt-go" onclick="regenWithPrompt(${i})">🚀 用此模型重新生成</button>
+          <button class="prompt-reset" onclick="document.getElementById('pt_'+${i}).value=window._imgPrompts[${i}]||''">↩ 还原原始</button>
+        </div>
+      </div>
+    </div>
+  </div>`;
+}
+
+// Lightbox放大查看
+function openLightbox(cardId) {
+  const card = document.getElementById(cardId);
+  if (!card) return;
+  const img = card.querySelector('img');
+  if (!img) return;
+  const src = img.src;
+  const label = card.querySelector('.img-card-label')?.textContent || '';
+
+  // 创建或复用lightbox
+  let lb = document.getElementById('globalLightbox');
+  if (!lb) {
+    lb = document.createElement('div');
+    lb.id = 'globalLightbox';
+    lb.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;z-index:9999;background:rgba(0,0,0,.92);display:flex;align-items:center;justify-content:center;flex-direction:column;gap:12px;cursor:zoom-out';
+    lb.onclick = () => lb.style.display = 'none';
+    document.body.appendChild(lb);
+  }
+  lb.innerHTML = `
+    <div style="position:absolute;top:16px;right:20px;color:#fff;font-size:24px;cursor:pointer;z-index:10" onclick="document.getElementById('globalLightbox').style.display='none'">✕</div>
+    <img src="${src}" style="max-width:90vw;max-height:85vh;object-fit:contain;border-radius:8px;box-shadow:0 8px 40px rgba(0,0,0,.8)" onclick="event.stopPropagation()">
+    <div style="color:#fff;font-size:13px;font-weight:600">${label}</div>
+    <a href="${src}" download style="color:#58a6ff;font-size:12px;text-decoration:none">💾 下载原图</a>`;
+  lb.style.display = 'flex';
+}
+
+function renderAplus(aplus) {
+  const modules = Array.isArray(aplus.modules) ? aplus.modules : [];
+  const modulesHtml = modules.map(m => `
+    <div class="aplus-module">
+      <div class="aplus-module-title">${escHtml(m.module_type || m.title || 'Module')}</div>
+      <div class="aplus-module-content">${escHtml(m.copy || m.content || m.text || '')}</div>
+      ${m.composition ? `<div class="aplus-composition">📐 构图: ${escHtml(m.composition)}</div>` : ''}
+    </div>`).join('');
+
+  return `
+    <div class="aplus-section">
+      <div class="aplus-header">
+        <h3>📋 A+ 页面完整方案</h3>
+      </div>
+      <div class="aplus-body">
+        ${aplus.intro ? `<div class="aplus-module"><div class="aplus-module-title">总体说明</div><div class="aplus-module-content">${escHtml(aplus.intro)}</div></div>` : ''}
+        ${modulesHtml || '<div style="color:var(--muted);font-size:12px">暂无 A+ 模块数据</div>'}
+        ${aplus.brand_story ? `<div class="aplus-module"><div class="aplus-module-title">品牌故事模块</div><div class="aplus-module-content">${escHtml(aplus.brand_story)}</div></div>` : ''}
+      </div>
+    </div>`;
+}
+
+function toggleRegenInput(i) {
+  const inp = document.getElementById(`regenInput_${i}`);
+  inp.classList.toggle('visible');
+  if (inp.classList.contains('visible')) inp.focus();
+}
+
+function togglePromptPanel(i) {
+  const p = document.getElementById('pp_' + i);
+  if (p) p.classList.toggle('open');
+}
+
+async function regenWithPrompt(i) {
+  const ptEl = document.getElementById(`pt_${i}`);
+  // 优先使用用户编辑后的 textarea 内容；textarea 不存在（如失败骨架）时回退到 plan 的原始 prompt
+  let prompt = ptEl?.value?.trim() || '';
+  if (!prompt) prompt = (window._imgPrompts && window._imgPrompts[i]) || '';
+
+  // 仍然为空且 textarea 可用：展开面板请用户填入
+  if (!prompt && ptEl) {
+    const panel = document.getElementById('pp_' + i);
+    if (panel && !panel.classList.contains('open')) panel.classList.add('open');
+    ptEl.focus();
+    ptEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    ptEl.style.borderColor = 'var(--accent3)';
+    setTimeout(() => { if (ptEl) ptEl.style.borderColor = ''; }, 2000);
+    return;
+  }
+
+  // 防止双击 / 同一张图并发请求：同一 i 已在生成中则忽略
+  if (!window._regenLocks) window._regenLocks = {};
+  if (window._regenLocks[i]) return;
+  window._regenLocks[i] = true;
+
+  const card = document.getElementById(`imgCard_${i}`);
+  const imgEl = card?.querySelector('.img-card-img');
+  const errEl = document.getElementById(`imgErr_${i}`);
+  const btn = card?.querySelector('.prompt-go');
+  const label = card?.querySelector('.img-card-label')?.textContent
+    || (window._imgPlan && window._imgPlan[i] && window._imgPlan[i].name)
+    || `图${i+1}`;
+
+  if (imgEl) imgEl.style.opacity = '0.3';
+  if (errEl) { errEl.style.display = 'flex'; errEl.innerHTML = '<span class="spinner-sm"></span><span style="font-size:12px">重新生成中...</span>'; }
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ 生成中...'; }
+
+  try {
+    const ctrl = new AbortController();
+    const t = setTimeout(() => ctrl.abort(), 240000);
+    // 优先使用卡片上的模型选择，回退到全局面板，再回退到 gemini
+    const chosenModel = document.getElementById(`pm_${i}`)?.value
+                     || document.getElementById('imageModel')?.value
+                     || 'gemini';
+    const resp = await fetch(IMAGE_WEBHOOK, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        action: 'generate',
+        productImages: (window.imgProductImgs || []).map(x => x.base64),
+        prompt: prompt,
+        taskId: i + 1,
+        taskName: label,
+        model: chosenModel
+      }),
+      signal: ctrl.signal
+    });
+    clearTimeout(t);
+    const d = safeParseJson(await resp.text());
+    if (d.success && d.imageBase64) {
+      const targetCard = document.getElementById(`imgCard_${i}`);
+      if (targetCard) targetCard.outerHTML = buildImgCard({
+        imageBase64: d.imageBase64,
+        modelUsed: d.modelUsed || chosenModel,
+        taskName: d.taskName || label,
+        prompt: d.prompt || prompt
+      }, i);
+    } else {
+      if (imgEl) imgEl.style.opacity = '1';
+      if (errEl) {
+        errEl.style.display = 'flex';
+        errEl.innerHTML = `<span style="font-size:22px">❌</span>
+          <span style="font-size:11px;color:var(--red);max-width:90%;text-align:center">${d.error || '生成失败'}</span>
+          <button class="regen-btn" onclick="regenWithPrompt(${i})" style="margin-top:6px">🔄 再试一次</button>`;
+      }
+      if (btn) { btn.disabled = false; btn.textContent = '🚀 用此提示词重新生成'; }
+    }
+  } catch(e) {
+    if (imgEl) imgEl.style.opacity = '1';
+    if (errEl) {
+      errEl.style.display = 'flex';
+      errEl.innerHTML = `<span style="font-size:22px">❌</span>
+        <span style="font-size:11px;color:var(--red);max-width:90%;text-align:center">${e.name === 'AbortError' ? '生成超时' : '失败: ' + e.message}</span>
+        <button class="regen-btn" onclick="regenWithPrompt(${i})" style="margin-top:6px">🔄 再试一次</button>`;
+    }
+    if (btn) { btn.disabled = false; btn.textContent = '🚀 用此提示词重新生成'; }
+  } finally {
+    // 无论成功失败都释放锁，下一次点击才能生效
+    window._regenLocks[i] = false;
+  }
+}
+
+function regenSingle(i) { regenWithPrompt(i); }
+
+// ===== PATENT PANEL =====
+function openPatentPanel() {
+  document.getElementById('patentPanel').classList.add('visible');
+
+  const productBanner = document.getElementById('patentCurrentProduct');
+  const productInfo   = document.getElementById('patentProductInfo');
+  const kwEl          = document.getElementById('patentKeyword');
+
+  if (currentData) {
+    // Show product banner
+    const name = currentData.product_name || currentData.asin || '';
+    const mkt  = currentData.marketplace || '';
+    const asin = currentData.asin || '';
+    productInfo.textContent = [name, mkt, asin ? 'ASIN: ' + asin : ''].filter(Boolean).join(' · ');
+    productBanner.style.display = 'flex';
+
+    // Sync top keywords if textarea is empty
+    if (!kwEl.value.trim()) {
+      const kws = Array.isArray(currentData.keywords) ? currentData.keywords : [];
+      // Take top 8 keywords (mix of core + long-tail), join with spaces
+      const topKws = kws.slice(0, 8).map(k => k.keyword || '').filter(Boolean);
+      if (topKws.length) kwEl.value = topKws.join(' ');
+    }
+  } else {
+    productBanner.style.display = 'none';
+  }
+
+  setTimeout(() => kwEl.focus(), 100);
+}
+
+function closePatentPanel() {
+  document.getElementById('patentPanel').classList.remove('visible');
+}
+
+function copyPatentKeywords() {
+  const kw = document.getElementById('patentKeyword').value.trim();
+  if (!kw) return;
+  navigator.clipboard.writeText(kw).then(() => {
+    const btn = document.getElementById('patentCopyBtn');
+    btn.textContent = '✓ 已复制';
+    setTimeout(() => btn.textContent = '复制', 1500);
+  });
+}
+
+function openGooglePatents() {
+  const kw = (document.getElementById('patentKeyword').value || '').trim();
+  const url = kw
+    ? 'https://patents.google.com/?q=' + encodeURIComponent(kw) + '&country=US&language=ENGLISH&type=PATENT'
+    : 'https://patents.google.com';
+  window.open(url, '_blank');
+}
+
+function openUSPTO() {
+  window.open('https://ppubs.uspto.gov/pubwebapp/', '_blank');
+}
+
+function openTMDN() {
+  window.open('https://www.tmdn.org/tmdsview-web/#/dsview', '_blank');
+}
+
+function openEUIPO() {
+  window.open('https://euipo.europa.eu/eSearch/', '_blank');
+}
+
+// ===== PROFIT CALCULATOR =====
+function calcProfit() {
+  const priceEl = document.getElementById('pc_price');
+  const vatDisp = document.getElementById('pc_vat_display');
+  if (!priceEl) return;
+
+  const site  = document.getElementById('siteSelect').value;
+  const rates = { US: 6, CA: 4.5, GB: 8, DE: 7, FR: 7, IT: 7, ES: 7 };
+  const syms  = { US: '$', CA: '$', GB: '£', DE: '€', FR: '€', IT: '€', ES: '€' };
+  const rate  = rates[site] || 7;
+  const sym   = syms[site]  || '$';
+  const isEu  = site !== 'US' && site !== 'CA';
+
+  const price = parseFloat(priceEl.value) || 0;
+
+  // 共同成本（站点货币）
+  const costRmb  = parseFloat(document.getElementById('pc_cost').value)    || 0; // ¥
+  const fba      = parseFloat(document.getElementById('pc_fba').value)     || 0; // site
+  const adsPct   = parseFloat(document.getElementById('pc_ads_pct').value) || 0; // %
+  const other    = parseFloat(document.getElementById('pc_other').value)   || 0; // site
+  const vatRate  = isEu ? 0.20 : 0;
+  const vatCost  = price * vatRate;
+  const adsCost  = price * adsPct / 100;
+  const costSite = costRmb / rate; // 采购成本转站点货币
+
+  if (vatDisp) vatDisp.value = isEu ? vatCost.toFixed(2) : '0';
+
+  // 头程四种方案（单价单位¥/kg，除以汇率转为站点货币）
+  const weight    = parseFloat(document.getElementById('pc_weight').value)     || 0;
+  const baseAir   = parseFloat(document.getElementById('pc_base_air').value)   || 0; // ¥/kg
+  const baseCargo = parseFloat(document.getElementById('pc_base_cargo').value) || 0; // ¥/kg
+  const baseRail  = parseFloat(document.getElementById('pc_base_rail').value)  || 0; // ¥/kg
+  const baseSea   = parseFloat(document.getElementById('pc_base_sea').value)   || 0; // ¥/kg
+  const shipAir   = baseAir   * weight / rate; // 转为站点货币
+  const shipCargo = baseCargo * weight / rate;
+  const shipRail  = baseRail  * weight / rate;
+  const shipSea   = baseSea   * weight / rate;
+
+  // 更新头程运费显示（站点货币）
+  const airRes   = document.getElementById('pc_air_result');
+  const cargoRes = document.getElementById('pc_cargo_result');
+  const railRes  = document.getElementById('pc_rail_result');
+  const seaRes   = document.getElementById('pc_sea_result');
+  const fmtS = v => v.toFixed(2);
+  if (airRes)   airRes.textContent   = fmtS(shipAir);
+  if (cargoRes) cargoRes.textContent = fmtS(shipCargo);
+  if (railRes)  railRes.textContent  = fmtS(shipRail);
+  if (seaRes)   seaRes.textContent   = fmtS(shipSea);
+
+  // 四种方案
+  const scenarios = [
+    { ship: shipAir,   mId: 'pc_air_margin',   pId: 'pc_air_profit',   rId: 'pc_air_roi'   },
+    { ship: shipCargo, mId: 'pc_cargo_margin', pId: 'pc_cargo_profit', rId: 'pc_cargo_roi' },
+    { ship: shipRail,  mId: 'pc_rail_margin',  pId: 'pc_rail_profit',  rId: 'pc_rail_roi'  },
+    { ship: shipSea,   mId: 'pc_sea_margin',   pId: 'pc_sea_profit',   rId: 'pc_sea_roi'   },
+  ];
+  if (price <= 0) {
+    scenarios.forEach(s => {
+      ['mId','pId','rId'].forEach(k => { const el=document.getElementById(s[k]); if(el){el.textContent='—';el.style.color='';} });
+    });
+    return;
+  }
+
+  // 计算每种方案
+  scenarios.forEach(s => {
+    const totalCost  = costSite + fba + adsCost + vatCost + s.ship + other;
+    const profitSite = price - totalCost;
+    const profitRmb  = profitSite * rate;
+    const pct = price > 0     ? profitSite / price     * 100 : 0;
+    const roi = totalCost > 0 ? profitSite / totalCost * 100 : 0;
+    const color = pct >= 25 ? '#3fb950' : pct >= 10 ? '#e3b341' : '#f85149';
+
+    const mEl = document.getElementById(s.mId);
+    const pEl = document.getElementById(s.pId);
+    const rEl = document.getElementById(s.rId);
+    if (mEl) { mEl.textContent = pct.toFixed(1) + '%'; mEl.style.color = color; }
+    if (pEl) { pEl.textContent = sym + profitSite.toFixed(2) + ' / ¥' + profitRmb.toFixed(0); pEl.style.color = color; }
+    if (rEl) { rEl.textContent = roi.toFixed(1) + '%'; rEl.style.color = color; }
+  });
+}
+
+// ===== RENDER RESULTS =====
+function renderResults(d) {
+  const el = document.getElementById('results');
+  const scores = d.scores || { market_size:5, entry_barrier:5, competition:5, profit_potential:5, overall:5 };
+  const seasonality = Array.isArray(d.seasonality) ? d.seasonality : [];
+  const keywords = Array.isArray(d.keywords) ? d.keywords : [];
+  const competitors = Array.isArray(d.competitors) ? d.competitors : [];
+  const painPoints = Array.isArray(d.pain_points) ? d.pain_points : [];
+  const risks = Array.isArray(d.risks) ? d.risks : [];
+  const portrait = d.user_portrait || {};
+  const ea = d.entry_analysis || {};
+  const cur = d.currency || (d.marketplace === 'US' || d.marketplace === 'CA' ? '$' : d.marketplace === 'GB' ? '£' : '€');
+  const rateMap = { US: 6, CA: 4.5, GB: 8, DE: 7, FR: 7, IT: 7, ES: 7 };
+  const rateForCalc = rateMap[d.marketplace] || 7;
+  const isEuSite = d.marketplace !== 'US' && d.marketplace !== 'CA';
+  const fbaVal = (d.fba_fee || 0).toFixed(2);   // already in site currency
+
+  // Helpers
+  function ring(val, color) {
+    const s = 80, r = (s-7)/2, c = 2*Math.PI*r;
+    const pct = Math.max(0, Math.min(10, val))/10;
+    const off = c*(1-pct);
+    return `<svg width="${s}" height="${s}" viewBox="0 0 ${s} ${s}"><circle class="ring-bg" cx="${s/2}" cy="${s/2}" r="${r}"/><circle class="ring-fg" cx="${s/2}" cy="${s/2}" r="${r}" stroke="${color}" stroke-dasharray="${c}" stroke-dashoffset="${off}"/></svg><span class="ring-num" style="color:${color}">${val}</span>`;
+  }
+  function scoreColor(s){ return s>=7?'#3fb950':s>=4?'#e3b341':'#f85149'; }
+  function badge(rec){
+    if(!rec) return '';
+    if(rec.includes('强烈推荐')) return '<span class="badge badge-green">'+rec+'</span>';
+    if(rec.includes('推荐')) return '<span class="badge badge-green">'+rec+'</span>';
+    if(rec.includes('谨慎')) return '<span class="badge badge-yellow">'+rec+'</span>';
+    return '<span class="badge badge-red">'+rec+'</span>';
+  }
+
+  // Season bars
+  const maxS = Math.max(...seasonality.map(x=>x.level||0),1);
+  const seasonBars = seasonality.map(s => {
+    const h = Math.max(3, (s.level/maxS)*88);
+    const col = s.level>=7?'#2f81f7':s.level>=4?'#39d353':'#484f58';
+    return `<div class="s-bar-wrap"><div class="s-bar" style="height:${h}px;background:${col}"><span class="s-tip">${s.month}: ${s.level}/10</span></div><span class="s-label">${(s.month||'').replace('月','')}</span></div>`;
+  }).join('');
+
+  // Keyword rows
+  const maxVol = Math.max(...keywords.map(k=>k.search_volume||0),1);
+  const kwRows = keywords.slice(0,12).map(k => {
+    const w = Math.max(4, ((k.search_volume||0)/maxVol)*90);
+    const typeMap = {'核心词':'kw-core','长尾词':'kw-long','趋势词':'kw-trend'};
+    return `<tr>
+      <td style="font-weight:600;color:var(--text)">${escHtml(k.keyword||'')}</td>
+      <td><div class="vol-bar-bg"><div class="vol-bar" style="width:${w}px"></div></div></td>
+      <td class="mono" style="font-size:11px;color:var(--sub)">${(k.search_volume||0).toLocaleString()}</td>
+      <td class="mono" style="font-size:11px;color:var(--sub)">${cur}${(k.cpc||0).toFixed(2)}</td>
+      <td><span class="kw-tag ${typeMap[k.type]||'kw-core'}">${k.type||'—'}</span></td>
+      <td class="mono" style="font-size:11px;color:var(--muted)">${k.rank||'—'}</td>
+    </tr>`;
+  }).join('');
+
+  // Comp rows
+  const compRows = competitors.slice(0,6).map(c => `<tr>
+    <td style="font-weight:600;font-size:12px">${escHtml(c.name||'—')}</td>
+    <td class="mono" style="font-size:11px;color:var(--muted)">${c.asin||'—'}</td>
+    <td class="mono" style="font-size:12px">${cur}${(c.price||0).toFixed(2)}</td>
+    <td style="font-size:12px">${c.rating||'—'} ⭐</td>
+    <td class="mono" style="font-size:12px">${(c.reviews||0).toLocaleString()}</td>
+    <td class="mono" style="font-size:12px">${(c.monthly_sales||0).toLocaleString()}</td>
+    <td style="font-size:11px;color:var(--sub)">${escHtml(c.advantage||'—')}</td>
+  </tr>`).join('');
+
+  // Pain points
+  const painHtml = painPoints.map(p => `
+    <div class="pain-item">
+      <div class="pain-bar ${p.severity||'medium'}"></div>
+      <div>
+        <div class="pain-issue">${escHtml(p.issue||p.text||'—')}</div>
+        <div class="pain-opp">💡 ${escHtml(p.opportunity||'')}</div>
+      </div>
+    </div>`).join('');
+
+  // Risks
+  const rb = {high:[],medium:[],low:[]};
+  risks.forEach(r => (rb[r.type||'medium']||rb.medium).push(r));
+  function riskItems(arr){ return arr.map(r=>`<div class="risk-item"><strong>${escHtml(r.title||'')}</strong>: ${escHtml(r.detail||'')}</div>`).join('')||'<div class="risk-item" style="color:var(--muted)">无</div>'; }
+
+  // Portrait
+  const portraitHtml = Object.entries(portrait).filter(([,v])=>v).map(([k,v])=>`<div class="portrait-item"><div class="p-label">${escHtml(k)}</div><div class="p-value">${escHtml(v)}</div></div>`).join('');
+
+  // Entry analysis
+  const eScore = ea.score!=null?ea.score:scores.overall||5;
+  const eColor = scoreColor(eScore);
+  const eClass = eScore>=7?'ev-go':eScore>=4?'ev-caution':'ev-stop';
+  const meterPct = Math.max(2,Math.min(98,eScore*10));
+  const defaultDims = [
+    {name:'类目集中度',icon:'📊',score:ea.concentration_score||scores.competition||5,detail:ea.concentration||'基于Top卖家市场份额分析'},
+    {name:'资金门槛',icon:'💰',score:ea.capital_score||scores.entry_barrier||5,detail:ea.capital_threshold||'首批备货+广告+FBA费用综合评估'},
+    {name:'差异化空间',icon:'🎨',score:ea.differentiation_score||scores.profit_potential||5,detail:ea.differentiation||'产品功能/外观/包装差异化机会'},
+    {name:'新品存活率',icon:'🌱',score:ea.survival_score||5,detail:ea.new_product_survival||'近6个月新品排名留存表现'},
+    {name:'品牌垄断度',icon:'🏢',score:ea.monopoly_score||5,detail:ea.brand_monopoly||'头部品牌流量控制程度'},
+    {name:'合规要求',icon:'📋',score:ea.compliance_score||5,detail:ea.compliance||'认证合规门槛评估'}
+  ];
+  const dims = Array.isArray(ea.dimensions)?ea.dimensions:defaultDims;
+  const dimsHtml = dims.map(dim=>{
+    const s=dim.score||5, c=scoreColor(s), p=Math.max(5,s*10);
+    return `<div class="e-dim"><div class="e-dim-head"><span class="e-dim-name">${dim.icon||'📌'} ${escHtml(dim.name)}</span><span class="e-dim-score" style="color:${c}">${s}/10</span></div><div class="e-dim-bar"><div class="e-dim-fill" style="width:${p}%;background:${c}"></div></div><div class="e-dim-detail">${escHtml(dim.detail||'')}</div></div>`;
+  }).join('');
+
+  const checklist = Array.isArray(ea.checklist)?ea.checklist:[{status:'pass',text:'市场有明确需求'},{status:'warn',text:'需关注头部卖家市场份额'},{status:'pass',text:'存在差异化切入点'}];
+  const checklistHtml = checklist.map(item=>{
+    const m={pass:'✓',warn:'!',fail:'✗'}, c={pass:'chk-pass',warn:'chk-warn',fail:'chk-fail'};
+    return `<li><span class="chk-icon ${c[item.status||'warn']}">${m[item.status||'warn']}</span><span>${escHtml(item.text||'')}</span></li>`;
+  }).join('');
+
+  el.innerHTML = `<div class="fade-in">
+
+  <!-- PRODUCT HEADER -->
+  <div class="section"><div class="card product-header-card">
+    <div class="product-title">${escHtml(d.product_name||d.asin||'—')}</div>
+    <div class="product-meta">
+      <span>📍 ${d.marketplace||'—'}</span>
+      <span class="mono">ASIN: ${d.asin||'—'}</span>
+      <span>${d.category_rank||''}</span>
+      <span>${badge(d.entry_recommendation)}</span>
+    </div>
+    <div class="kpi-grid">
+      <div class="kpi"><div class="k-label">售价</div><div class="k-value">${cur}${(d.price||0).toFixed(2)}</div></div>
+      <div class="kpi"><div class="k-label">月销量</div><div class="k-value">${(d.monthly_sales||0).toLocaleString()}</div></div>
+      <div class="kpi"><div class="k-label">月销额</div><div class="k-value">${cur}${Math.round((d.monthly_sales||0)*(d.price||0)).toLocaleString()}</div></div>
+      <div class="kpi"><div class="k-label">评分</div><div class="k-value">${d.rating||'—'}<span class="k-unit">⭐</span></div></div>
+      <div class="kpi"><div class="k-label">评价数</div><div class="k-value">${(d.review_count||0).toLocaleString()}</div></div>
+      <div class="kpi"><div class="k-label">BSR</div><div class="k-value">#${(d.bsr||0).toLocaleString()}</div></div>
+      <div class="kpi"><div class="k-label">FBA费</div><div class="k-value">${cur}${(d.fba_fee||0).toFixed(2)}</div></div>
+      <div class="kpi"><div class="k-label">综合评分</div><div class="k-value" style="color:${scoreColor(scores.overall)}">${scores.overall}/10</div></div>
+    </div>
+  </div></div>
+
+  <!-- TABS -->
+  <div class="tab-nav" id="tabNav">
+    <button class="tab-btn active" onclick="switchTab('overview')">📊 综合评分</button>
+    <button class="tab-btn" onclick="switchTab('entry')">📈 可进入性</button>
+    <button class="tab-btn" onclick="switchTab('season')">📅 季节性</button>
+    <button class="tab-btn" onclick="switchTab('keywords')">🔑 关键词</button>
+    <button class="tab-btn" onclick="switchTab('competitors')">⚔️ 竞品</button>
+    <button class="tab-btn" onclick="switchTab('voc')">💬 VOC痛点</button>
+    <button class="tab-btn" onclick="switchTab('risks')">⚠️ 风险</button>
+    <button class="tab-btn" onclick="switchTab('portrait')">👤 用户画像</button>
+    <button class="tab-btn" onclick="switchTab('strategy')">🎯 策略</button>
+    <button class="tab-btn" onclick="switchTab('report')">📄 完整报告</button>
+  </div>
+
+  <!-- TAB: OVERVIEW -->
+  <div class="tab-pane active" id="tab-overview">
+    <div class="section"><div class="card">
+      <div class="card-title"><span class="icon">🎯</span>多维度评分</div>
+      <div class="score-grid">
+        <div class="score-item"><div class="ring-wrap">${ring(scores.market_size,'#2f81f7')}</div><div class="score-label">市场规模</div><div class="score-hint">类目整体销售规模</div><div class="score-desc">分越高=市场空间越大，值得投入</div></div>
+        <div class="score-item"><div class="ring-wrap">${ring(scores.entry_barrier,'#a371f7')}</div><div class="score-label">进入门槛</div><div class="score-hint">⚠️ 反向指标：10=最易进入</div><div class="score-desc">综合资金/认证/技术要求，分低说明壁垒高</div></div>
+        <div class="score-item"><div class="ring-wrap">${ring(scores.competition,'#39d353')}</div><div class="score-label">竞争强度</div><div class="score-hint">⚠️ 反向指标：10=竞争最弱</div><div class="score-desc">分低说明头部垄断强、新品难突围</div></div>
+        <div class="score-item"><div class="ring-wrap">${ring(scores.profit_potential,'#e3b341')}</div><div class="score-label">利润潜力</div><div class="score-hint">综合定价空间与成本</div><div class="score-desc">分越高=毛利空间越大，广告压力越小</div></div>
+        <div class="score-item"><div class="ring-wrap">${ring(scores.overall,scoreColor(scores.overall))}</div><div class="score-label">综合可行性</div><div class="score-hint">${scores.overall>=7?'✅ 推荐进入':scores.overall>=4?'⚡ 谨慎评估':'❌ 不建议'}</div><div class="score-desc">AI综合以上维度的进入建议</div></div>
+      </div>
+    </div></div>
+    <div class="two-col">
+      <div class="card"><div class="card-title"><span class="icon">📏</span>市场规模</div><p style="font-size:12px;color:var(--sub);line-height:1.7">${escHtml(d.market_size||'暂无数据')}</p></div>
+      <div class="card"><div class="card-title"><span class="icon">🚪</span>可进入性摘要</div><p style="font-size:12px;color:var(--sub);line-height:1.7">${escHtml(d.entry_reason||'暂无数据')}</p></div>
+    </div>
+  </div>
+
+  <!-- TAB: ENTRY -->
+  <div class="tab-pane" id="tab-entry">
+    <div class="section"><div class="card entry-verdict ${eClass}">
+      <div class="ev-score" style="color:${eColor}">${eScore}<span style="font-size:22px;color:var(--muted)">/10</span></div>
+      <div class="ev-label">${escHtml(ea.verdict||d.entry_recommendation||'待评估')}</div>
+      <div class="ev-sub">${escHtml(ea.summary||d.entry_reason||'')}</div>
+      <div class="ev-meter"><div class="ev-dot" style="left:calc(${meterPct}% - 8px)"></div></div>
+      <div class="ev-labels"><span>不建议</span><span>谨慎评估</span><span>推荐进入</span><span>强烈推荐</span></div>
+    </div></div>
+    <div class="section">
+      <div class="card-title"><span class="icon">📐</span>六维度评估</div>
+      <div class="entry-dims">${dimsHtml}</div>
+    </div>
+    <div class="two-col">
+      <div class="card"><div class="card-title"><span class="icon">✅</span>进入条件检查清单</div><ul class="checklist">${checklistHtml}</ul></div>
+      <div class="card"><div class="card-title"><span class="icon">💰</span>试算利润 <span style="margin-left:auto;font-size:10px;color:var(--muted);font-weight:400;font-family:'JetBrains Mono',monospace">${cur}1 = ¥${rateForCalc}</span></div>
+
+        <!-- 基本成本 2列 -->
+        <div class="pc-sub-title">基本成本</div>
+        <div class="pc-grid">
+          <div class="pc-grid-item"><span class="pc-label">📦 采购成本</span><div class="pc-input-wrap"><input class="pc-input" id="pc_cost" type="number" min="0" placeholder="0" oninput="calcProfit()" style="width:66px"><span class="pc-unit">¥</span></div></div>
+          <div class="pc-grid-item"><span class="pc-label">🏪 FBA配送费</span><div class="pc-input-wrap"><input class="pc-input" id="pc_fba" type="number" min="0" step="0.01" placeholder="0" value="${fbaVal}" oninput="calcProfit()" style="width:66px"><span class="pc-unit">${cur}</span></div></div>
+          <div class="pc-grid-item"><span class="pc-label">📢 广告占比</span><div class="pc-input-wrap"><input class="pc-input" id="pc_ads_pct" type="number" min="0" max="100" step="0.1" value="15" oninput="calcProfit()" style="width:66px"><span class="pc-unit">%</span></div></div>
+          <div class="pc-grid-item"><span class="pc-label">📋 其他费用</span><div class="pc-input-wrap"><input class="pc-input" id="pc_other" type="number" min="0" step="0.01" placeholder="0" oninput="calcProfit()" style="width:66px"><span class="pc-unit">${cur}</span></div></div>
+          <div class="pc-grid-item" style="grid-column:1/-1"><span class="pc-label">🌍 税费/VAT <span style="font-size:9px;color:var(--muted)">${isEuSite ? '欧洲固定20%自动计算' : '美国/加拿大 0%'}</span></span><div class="pc-input-wrap"><input class="pc-auto" id="pc_vat_display" readonly value="${isEuSite ? '自动' : '0'}"><span class="pc-unit">${cur}</span></div></div>
+        </div>
+
+        <!-- 头程运费 -->
+        <div class="pc-sub-title" style="margin-top:6px">头程运费 <span style="font-size:9px;font-weight:400;color:var(--muted);text-transform:none;letter-spacing:0">物流单价(¥/kg)×重量÷汇率，四种方案均计算</span></div>
+        <div class="pc-row" style="padding:5px 0">
+          <span class="pc-label" style="font-size:11px">📦 货物重量</span>
+          <div class="pc-input-wrap"><input class="pc-input" id="pc_weight" type="number" min="0" step="0.1" placeholder="0" oninput="calcProfit()" style="width:66px"><span class="pc-unit">kg</span></div>
+        </div>
+        <div>
+          <div class="pc-ship-row"><span style="flex:1;color:var(--sub);font-size:12px;font-weight:600">✈️ 空派</span><span style="color:var(--sub);font-size:10px">物流单价</span><input class="pc-input" id="pc_base_air" type="number" min="0" step="0.1" value="50" oninput="calcProfit()" style="width:60px;font-size:11px"><span style="font-size:10px;color:var(--sub)">¥/kg =</span><span id="pc_air_result" class="mono" style="min-width:46px;text-align:right;color:var(--text);font-size:11px">—</span><span class="pc-unit">${cur}</span></div>
+          <div class="pc-ship-row"><span style="flex:1;color:var(--sub);font-size:12px;font-weight:600">🚛 卡航</span><span style="color:var(--sub);font-size:10px">物流单价</span><input class="pc-input" id="pc_base_cargo" type="number" min="0" step="0.1" value="17" oninput="calcProfit()" style="width:60px;font-size:11px"><span style="font-size:10px;color:var(--sub)">¥/kg =</span><span id="pc_cargo_result" class="mono" style="min-width:46px;text-align:right;color:var(--text);font-size:11px">—</span><span class="pc-unit">${cur}</span></div>
+          <div class="pc-ship-row"><span style="flex:1;color:var(--sub);font-size:12px;font-weight:600">🚂 铁路</span><span style="color:var(--sub);font-size:10px">物流单价</span><input class="pc-input" id="pc_base_rail" type="number" min="0" step="0.1" value="14" oninput="calcProfit()" style="width:60px;font-size:11px"><span style="font-size:10px;color:var(--sub)">¥/kg =</span><span id="pc_rail_result" class="mono" style="min-width:46px;text-align:right;color:var(--text);font-size:11px">—</span><span class="pc-unit">${cur}</span></div>
+          <div class="pc-ship-row"><span style="flex:1;color:var(--sub);font-size:12px;font-weight:600">🚢 海运</span><span style="color:var(--sub);font-size:10px">物流单价</span><input class="pc-input" id="pc_base_sea" type="number" min="0" step="0.1" value="10" oninput="calcProfit()" style="width:60px;font-size:11px"><span style="font-size:10px;color:var(--sub)">¥/kg =</span><span id="pc_sea_result" class="mono" style="min-width:46px;text-align:right;color:var(--text);font-size:11px">—</span><span class="pc-unit">${cur}</span></div>
+        </div>
+
+        <!-- 售价一行（最后） -->
+        <hr class="pc-sep">
+        ${competitors.length > 0 ? `<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:6px"><span style="font-size:10px;color:var(--muted);flex:none">竞品参考:</span>${competitors.slice(0,3).map(c=>`<span style="font-size:11px;font-family:'JetBrains Mono',monospace;color:var(--sub);background:var(--bg3);border-radius:4px;padding:2px 6px">${cur}${(c.price||0).toFixed(2)}</span>`).join('')}</div>` : ''}
+        <div class="pc-row">
+          <span class="pc-label" style="color:var(--text);font-weight:600;flex:none">🏷️ 我的售价</span>
+          <div class="pc-input-wrap" style="margin-left:6px"><input class="pc-input" id="pc_price" type="number" min="0" step="0.01" value="${(d.price||0).toFixed(2)}" oninput="calcProfit()" style="border-color:var(--accent);width:80px"><span class="pc-unit">${cur}</span></div>
+        </div>
+
+        <!-- 4方案利润对比 -->
+        <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:6px;margin-top:10px">
+          <div class="kpi" style="border-top:2px solid rgba(47,129,247,.5);padding:10px 8px">
+            <div class="k-label" style="color:#58a6ff">✈️ 空派</div>
+            <div class="k-unit" style="margin:4px 0 1px">利润率</div>
+            <div id="pc_air_margin" class="k-value" style="font-size:16px;transition:color .2s">—</div>
+            <div class="k-unit" style="margin:4px 0 1px">利润额</div>
+            <div id="pc_air_profit" style="font-size:11px;font-family:'JetBrains Mono',monospace;transition:color .2s">—</div>
+            <div class="k-unit" style="margin:4px 0 1px">ROI</div>
+            <div id="pc_air_roi" style="font-size:13px;font-family:'JetBrains Mono',monospace;transition:color .2s">—</div>
+          </div>
+          <div class="kpi" style="border-top:2px solid rgba(251,189,71,.5);padding:10px 8px">
+            <div class="k-label" style="color:#fbb947">🚛 卡航</div>
+            <div class="k-unit" style="margin:4px 0 1px">利润率</div>
+            <div id="pc_cargo_margin" class="k-value" style="font-size:16px;transition:color .2s">—</div>
+            <div class="k-unit" style="margin:4px 0 1px">利润额</div>
+            <div id="pc_cargo_profit" style="font-size:11px;font-family:'JetBrains Mono',monospace;transition:color .2s">—</div>
+            <div class="k-unit" style="margin:4px 0 1px">ROI</div>
+            <div id="pc_cargo_roi" style="font-size:13px;font-family:'JetBrains Mono',monospace;transition:color .2s">—</div>
+          </div>
+          <div class="kpi" style="border-top:2px solid rgba(63,185,80,.5);padding:10px 8px">
+            <div class="k-label" style="color:#3fb950">🚂 铁路</div>
+            <div class="k-unit" style="margin:4px 0 1px">利润率</div>
+            <div id="pc_rail_margin" class="k-value" style="font-size:16px;transition:color .2s">—</div>
+            <div class="k-unit" style="margin:4px 0 1px">利润额</div>
+            <div id="pc_rail_profit" style="font-size:11px;font-family:'JetBrains Mono',monospace;transition:color .2s">—</div>
+            <div class="k-unit" style="margin:4px 0 1px">ROI</div>
+            <div id="pc_rail_roi" style="font-size:13px;font-family:'JetBrains Mono',monospace;transition:color .2s">—</div>
+          </div>
+          <div class="kpi" style="border-top:2px solid rgba(163,113,247,.5);padding:10px 8px">
+            <div class="k-label" style="color:#bc8cff">🚢 海运</div>
+            <div class="k-unit" style="margin:4px 0 1px">利润率</div>
+            <div id="pc_sea_margin" class="k-value" style="font-size:16px;transition:color .2s">—</div>
+            <div class="k-unit" style="margin:4px 0 1px">利润额</div>
+            <div id="pc_sea_profit" style="font-size:11px;font-family:'JetBrains Mono',monospace;transition:color .2s">—</div>
+            <div class="k-unit" style="margin:4px 0 1px">ROI</div>
+            <div id="pc_sea_roi" style="font-size:13px;font-family:'JetBrains Mono',monospace;transition:color .2s">—</div>
+          </div>
+        </div>
+        <div class="pc-hint">填写成本和售价后自动计算 · 汇率：USD×6 / EUR×7 / GBP×8 / CAD×4.5</div>
+      </div>
+    </div>
+    <div class="section" style="margin-top:14px">
+      <div class="strategy-block"><h4>🚀 进入行动建议</h4><p>${escHtml(ea.action_items||d.entry_strategy||'暂无建议')}</p></div>
+      <div class="strategy-block" style="border-left-color:var(--accent2)"><h4>⚠️ 关键注意事项</h4><p>${escHtml(ea.cautions||'请结合风险评估综合决策')}</p></div>
+    </div>
+  </div>
+
+  <!-- TAB: SEASON -->
+  <div class="tab-pane" id="tab-season">
+    <div class="card">
+      <div class="card-title"><span class="icon">📅</span>月度销售季节性 ${d.peak_season?`<span class="badge badge-blue">${d.peak_season}</span>`:''}
+      </div>
+      <div class="season-chart">${seasonBars||'<div style="color:var(--muted);font-size:12px">暂无季节性数据</div>'}</div>
+      ${d.peak_season_detail?`<p style="margin-top:12px;font-size:12px;color:var(--sub);line-height:1.7">${escHtml(d.peak_season_detail)}</p>`:''}
+    </div>
+  </div>
+
+  <!-- TAB: KEYWORDS -->
+  <div class="tab-pane" id="tab-keywords">
+    <div class="card" style="overflow-x:auto">
+      <div class="card-title"><span class="icon">🔑</span>核心关键词 <span style="font-size:11px;color:var(--muted);font-weight:400">(共${keywords.length}个)</span></div>
+      <table class="kw-table">
+        <thead><tr><th>关键词</th><th style="min-width:110px">搜索量</th><th>月搜</th><th>CPC</th><th>类型</th><th>排名</th></tr></thead>
+        <tbody>${kwRows||'<tr><td colspan="6" style="text-align:center;color:var(--muted);padding:20px">暂无关键词数据</td></tr>'}</tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- TAB: COMPETITORS -->
+  <div class="tab-pane" id="tab-competitors">
+    <div class="card" style="overflow-x:auto">
+      <div class="card-title"><span class="icon">⚔️</span>竞品对比</div>
+      <table class="comp-table">
+        <thead><tr><th>品牌</th><th>ASIN</th><th>价格</th><th>评分</th><th>评价数</th><th>月销</th><th>核心优势</th></tr></thead>
+        <tbody>${compRows||'<tr><td colspan="7" style="text-align:center;color:var(--muted);padding:20px">暂无竞品数据</td></tr>'}</tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- TAB: VOC -->
+  <div class="tab-pane" id="tab-voc">
+    <div class="section"><div class="card">
+      <div class="card-title"><span class="icon">💬</span>消费者痛点 (VOC)</div>
+      <div class="pain-list">${painHtml||'<div style="color:var(--muted);font-size:12px;text-align:center;padding:20px">暂无痛点数据</div>'}</div>
+    </div></div>
+    <div class="two-col">
+      <div class="card"><div class="card-title"><span class="icon">💡</span>产品改进机会</div><p style="font-size:12px;color:var(--sub);line-height:1.7">${escHtml(d.product_opportunities||'暂无')}</p></div>
+      <div class="card"><div class="card-title"><span class="icon">🧩</span>配件/组合机会</div><p style="font-size:12px;color:var(--sub);line-height:1.7">${escHtml(d.accessory_opportunities||'暂无')}</p></div>
+    </div>
+  </div>
+
+  <!-- TAB: RISKS -->
+  <div class="tab-pane" id="tab-risks">
+    <div class="card">
+      <div class="card-title"><span class="icon">⚠️</span>风险评估</div>
+      <div class="risk-cols">
+        <div class="risk-col r-high"><div class="risk-col-title">⚠️ 高风险</div>${riskItems(rb.high)}</div>
+        <div class="risk-col r-med"><div class="risk-col-title">⚡ 中风险</div>${riskItems(rb.medium)}</div>
+        <div class="risk-col r-low"><div class="risk-col-title">✅ 低风险</div>${riskItems(rb.low)}</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- TAB: PORTRAIT -->
+  <div class="tab-pane" id="tab-portrait">
+    <div class="card">
+      <div class="card-title"><span class="icon">👤</span>目标用户画像</div>
+      <div class="portrait-grid">${portraitHtml||'<div style="color:var(--muted);font-size:12px">暂无用户画像数据</div>'}</div>
+    </div>
+  </div>
+
+  <!-- TAB: STRATEGY -->
+  <div class="tab-pane" id="tab-strategy">
+    <div class="strategy-block"><h4>🎯 市场切入策略</h4><p>${escHtml(d.entry_strategy||'暂无')}</p></div>
+    <div class="strategy-block" style="border-left-color:var(--accent2)"><h4>🏭 采购/选品建议</h4><p>${escHtml(d.sourcing_suggestion||'暂无')}</p></div>
+  </div>
+
+  <!-- TAB: REPORT -->
+  <div class="tab-pane" id="tab-report">
+    <div class="card">
+      <div class="card-title">
+        <span class="icon">📄</span>完整分析报告
+        ${d.full_report ? `
+          <span style="font-size:11px;color:var(--muted);font-weight:400;margin-left:auto">${Math.round(d.full_report.length/2)}字</span>
+          <button class="btn btn-ghost btn-xs" style="margin-left:8px"
+            onclick="(function(btn){var t=btn.getAttribute('data-report');navigator.clipboard.writeText(t).then(function(){btn.textContent='✓ 已复制';setTimeout(function(){btn.textContent='📋 复制'},1500)}).catch(function(){});})(this)"
+            data-report="${escHtml(d.full_report)}">📋 复制</button>
+        ` : ''}
+      </div>
+      <div class="full-report" id="fullReportContainer">
+        ${d.full_report
+          ? (typeof marked!=='undefined' ? marked.parse(d.full_report) : '<pre style="white-space:pre-wrap">'+escHtml(d.full_report)+'</pre>')
+          : `<div style="text-align:center;padding:48px 20px">
+              <div style="font-size:40px;margin-bottom:14px">📝</div>
+              <div style="font-size:14px;color:var(--text);font-weight:700;margin-bottom:8px">尚未生成完整深度报告</div>
+              <div style="font-size:12px;color:var(--sub);line-height:1.7;margin-bottom:22px;max-width:440px;margin-left:auto;margin-right:auto">点击下方按钮，基于当前分析数据生成 <strong style="color:var(--text)">8000-12000 字</strong>深度报告，约需 <strong style="color:var(--text)">60-90 秒</strong></div>
+              <button id="genReportBtn" class="btn btn-purple" onclick="generateFullReport()">📝 生成完整报告</button>
+            </div>`
+        }
+      </div>
+    </div>
+  </div>
+
+  </div>`;
+
+  el.classList.add('visible');
+}
+
+function switchTab(name) {
+  document.querySelectorAll('.tab-btn').forEach((b,i) => {
+    const tabs = ['overview','entry','season','keywords','competitors','voc','risks','portrait','strategy','report'];
+    b.classList.toggle('active', tabs[i] === name);
+  });
+  document.querySelectorAll('.tab-pane').forEach(p => {
+    p.classList.toggle('active', p.id === 'tab-' + name);
+  });
+}
+
+// ===== COPY HELPERS =====
+function escHtml(s) {
+  if (!s) return '';
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function copyField(id) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  const text = el.innerText.replace('复制','').trim();
+  navigator.clipboard.writeText(text).then(() => {
+    const btn = el.querySelector('.copy-btn');
+    if (btn) { btn.textContent = '✓ 已复制'; setTimeout(() => btn.textContent = '复制', 1500); }
+  });
+}
+
+function copyAllListing() {
+  const body = document.getElementById('listingBody');
+  if (!body) return;
+  let text = '';
+  body.querySelectorAll('.listing-field').forEach(f => {
+    const label = f.querySelector('.lf-label')?.innerText || '';
+    const content = f.querySelector('.lf-content')?.innerText?.replace('复制','').trim() || '';
+    if (content) text += label + '\n' + content + '\n\n';
+  });
+  navigator.clipboard.writeText(text.trim()).then(() => {
+    const btn = document.querySelector('.listing-card-header .btn');
+    if (btn) { btn.textContent = '✅ 已复制'; setTimeout(() => btn.textContent = '📋 复制全部', 1500); }
+  });
+}
+
+// ===== MISC =====
+// 🆕 新产品按钮：若已有数据则弹确认；空白状态直接重置
+function confirmReset() {
+  // 检测是否有任何数据需要清理
+  const hasData = !!(
+    currentData ||
+    (window.lastListingResult) ||
+    (window.imgProductImgs && window.imgProductImgs.length) ||
+    (window.imgAccessoryImgs && window.imgAccessoryImgs.length) ||
+    (window.productImgs && window.productImgs.length) ||
+    (window.listingHistory && window.listingHistory.length)
+  );
+  // 任意操作正在进行中也要警告
+  const locks = window._actionLocks || {};
+  const busy = !!(locks.startAnalysis || locks.listingOp || locks.generateImages || locks.generateFullReport || locks.fetchCompetitorImages);
+
+  if (busy) {
+    alert('请等待当前操作完成再开始新产品');
+    return;
+  }
+  if (hasData) {
+    if (!confirm('⚠️ 开始新产品工作流\n\n当前所有数据将被清空：\n• 竞品分析结果\n• Listing 文案 + 历史版本\n• 已生成图片\n• 上传的图片\n\n确认继续吗？')) return;
+  }
+  resetAll();
+  showToast('已清空数据', '可以开始新产品的工作流', 'info');
+}
+
+function resetAll() {
+  // 切回竞品分析 tab + 把 3 个 tab 的空状态都重新显示，清掉生成中状态
+  switchMainTab('analysis');
+  hideGeneratingState('listing');
+  hideGeneratingState('images');
+  showEmptyState('analysis');
+  showEmptyState('listing');
+  showEmptyState('images');
+  document.getElementById('results').classList.remove('visible');
+  document.getElementById('results').innerHTML = '';
+  document.getElementById('asinInput').value = '';
+  document.getElementById('actionZone').classList.remove('visible');
+  document.getElementById('listingOutput').classList.remove('visible');
+  document.getElementById('listingOutput').innerHTML = '';
+  document.getElementById('imageOutput').classList.remove('visible');
+  document.getElementById('imageOutput').innerHTML = '';
+  document.getElementById('actionStatus').innerHTML = '';
+  currentData = null;
+  window.productImgs = []; window.accessoryImgs = [];
+  window.imgProductImgs = []; window.imgAccessoryImgs = [];
+  // 清理上一次生图遗留的缓存，避免 regen fallback 取到旧 prompt
+  window._imgPlan = null;
+  window._imgPrompts = {};
+  window._regenLocks = {};
+  // 清理 Listing 历史和修改标记，切换 ASIN 后是全新工作流
+  window.lastListingResult = null;
+  window.reviseFields = {};
+  window.listingHistory = [];
+  window.currentHistoryIdx = -1;
+  document.getElementById('advantageInput').value = '';
+  document.getElementById('brandInput').value = '';
+  document.getElementById('imageStyleInput').value = '';
+  const modelSel = document.getElementById('imageModel');
+  if (modelSel) modelSel.value = 'gemini';
+  document.getElementById('asinInput').focus();
+}
+
+function showError(msg) {
+  const b = document.getElementById('errorBox');
+  b.textContent = msg;
+  b.classList.add('visible');
+  setTimeout(() => b.classList.remove('visible'), 5000);
+}
+function hideError() { document.getElementById('errorBox').classList.remove('visible'); }
+function setStatus(html) { document.getElementById('actionStatus').innerHTML = html; }
+
+document.getElementById('asinInput').addEventListener('keypress', e => { if (e.key === 'Enter') startAnalysis(); });
+
+// ===== DOWNLOAD ALL IMAGES AS ZIP =====
+async function downloadAllImages() {
+  const btn = document.getElementById('downloadAllBtn');
+  const imgs = document.querySelectorAll('#imageOutput .img-card-img');
+  if (!imgs.length) return;
+  btn.disabled = true;
+  btn.textContent = '⏳ 打包中...';
+  const zip = new JSZip();
+  let count = 0;
+  for (const img of imgs) {
+    const src = img.src;
+    if (!src || !src.startsWith('data:')) continue;
+    // 卡片 label 可能含模型标记，去掉 "· GPT/· Gemini" 部分
+    const rawLabel = img.closest('.img-card')?.querySelector('.img-card-label')?.textContent || `image_${count+1}`;
+    const label = rawLabel.split('·')[0].trim();
+    // 从 dataURI 解析真实 MIME，扩展名按实际格式
+    const m = src.match(/^data:([^;]+);base64,(.+)$/);
+    const mime = m ? m[1].toLowerCase() : 'image/png';
+    const ext = mime === 'image/jpeg' || mime === 'image/jpg' ? 'jpg'
+              : mime === 'image/webp' ? 'webp'
+              : mime === 'image/gif' ? 'gif'
+              : 'png';
+    const base64 = m ? m[2] : src.split(',')[1];
+    const filename = label.replace(/[\\/:*?"<>|\s]+/g,'_') + '.' + ext;
+    zip.file(filename, base64, { base64: true });
+    count++;
+  }
+  if (!count) { btn.disabled = false; btn.textContent = '💾 下载全部图片'; return; }
+  const asin = (currentData && currentData.asin) || 'images';
+  const blob = await zip.generateAsync({ type: 'blob' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `${asin}_images.zip`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(a.href);
+  btn.disabled = false;
+  btn.innerHTML = `💾 下载全部图片 <span style="color:var(--green);font-size:11px">✓ ${count}张</span>`;
+}
+
+// Close modals on outside click
+document.getElementById('listingPanel').addEventListener('click', e => { if (e.target === e.currentTarget) closeListingPanel(); });
+document.getElementById('imagePanel').addEventListener('click', e => { if (e.target === e.currentTarget) closeImagePanel(); });
+document.getElementById('patentPanel').addEventListener('click', e => { if (e.target === e.currentTarget) closePatentPanel(); });
+document.getElementById('rewriteModal').addEventListener('click', e => { if (e.target === e.currentTarget) closeRewriteModal(); });
+// Esc 关闭重写弹窗
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape' && document.getElementById('rewriteModal').style.display === 'flex') closeRewriteModal();
+});
+
+// ===== 测试模式：URL 带 ?test=1 启用，跳过竞品分析直接进生图面板 =====
+(function initTestMode() {
+  if (!new URLSearchParams(location.search).has('test')) return;
+  const btn = document.createElement('button');
+  btn.id = 'testModeBtn';
+  btn.className = 'btn btn-green btn-sm';
+  btn.textContent = '🧪 测试模式 · 跳过分析进入生图';
+  btn.style.cssText = 'position:fixed;bottom:20px;right:20px;z-index:9999;box-shadow:0 4px 16px rgba(0,0,0,.3);font-size:12px';
+  btn.onclick = enterTestMode;
+  document.body.appendChild(btn);
+})();
+
+function enterTestMode() {
+  // 注入最小可用的 mock currentData，让 openImagePanel 不再报错
+  currentData = {
+    asin: 'TESTASIN001',
+    marketplace: 'US',
+    product_name: '测试产品 - 智能宠物饮水机',
+    category_rank: 'Pet Supplies > Cats > Bowls & Feeders',
+    keywords: ['pet water fountain', 'cat drinking fountain', 'automatic dispenser'],
+    pain_points: [
+      { issue: '宠物饮水量不足导致泌尿系统问题' },
+      { issue: '普通水碗细菌滋生' },
+      { issue: '主人不在家时无法及时换水' }
+    ],
+    user_portrait: {
+      gender: '不限',
+      age: '25-45',
+      occupation: '上班族',
+      lifestyle: '养宠物的城市白领',
+      purchase_motivation: '关注宠物健康，追求科技感与便捷生活'
+    },
+    price: 49.99,
+    _listing_title: 'TEST: Smart Pet Water Fountain 2.5L Auto Refill BPA Free'
+  };
+  // 同步填充生图面板里的"我们产品名称"和"卖点"输入框
+  const op = document.getElementById('ourProductName');
+  if (op && !op.value) op.value = '智能宠物饮水机 2.5L 自动循环过滤';
+  const ai = document.getElementById('advantageInput');
+  if (ai && !ai.value) ai.value = '超静音水泵；三重过滤；2.5L 大容量；缺水提醒；BPA-free 食品级材质';
+  // 不走 openImagePanel 的 currentData 校验，直接显示面板
+  document.getElementById('imagePanel').classList.add('visible');
+  const notice = document.getElementById('imageProductReuseNotice');
+  if (notice) notice.style.display = 'none';
+  alert('已进入测试模式 ✅\n\n下一步：\n1. 在面板里上传至少 1 张产品图片（可选：再传几张配件图）\n2. 选择生图模型（默认 Gemini）\n3. 点击 🚀 开始生成图片\n\nMock currentData 已注入，可在 F12 Console 输入 `currentData` 查看。');
+}
+
+// ===== MOCK 模式：URL 带 ?mock=1 → 拦截所有 n8n 请求返回假数据 =====
+// 用法：访问 http://127.0.0.1:8080/index.html?mock=1
+// 自动跳过登录 + 所有后端调用 1-3 秒内返回假数据，方便纯前端测试 UI
+(function _bpInitMockMode() {
+  if (!new URLSearchParams(location.search).has('mock')) return;
+
+  // 自动登录（跳过密码门）
+  try {
+    const fakeToken = 'mock-token-for-ui-testing';
+    localStorage.setItem('bp_auth', '1');
+    localStorage.setItem('bp_token', fakeToken);
+  } catch(e) {}
+
+  // 顶部 banner 提示用户在 mock 模式
+  document.addEventListener('DOMContentLoaded', () => {
+    const banner = document.createElement('div');
+    banner.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:11500;padding:6px 16px;background:linear-gradient(90deg,#f78166,#e3b341);color:#0f172a;font-size:12px;font-weight:700;text-align:center;box-shadow:0 2px 8px rgba(0,0,0,.3)';
+    banner.innerHTML = '🧪 MOCK 模式 · 所有请求返回假数据，不调用真实后端 · <a href="?" style="color:#0f172a;text-decoration:underline">退出 mock</a>';
+    document.body.appendChild(banner);
+    document.querySelector('header.header').style.marginTop = '28px';
+  });
+
+  // 生成不同颜色的 SVG 占位图（每张图用不同颜色，方便区分）
+  const mockImg = (label, idx) => {
+    const colors = ['#a371f7','#3fb950','#2f81f7','#f78166','#e3b341','#39d353','#f85149'];
+    const color = colors[(idx-1) % colors.length];
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="800" height="800" viewBox="0 0 800 800">
+      <rect width="800" height="800" fill="${color}"/>
+      <text x="400" y="380" font-size="56" font-weight="800" fill="white" text-anchor="middle" font-family="sans-serif">MOCK</text>
+      <text x="400" y="440" font-size="28" fill="white" text-anchor="middle" opacity="0.9" font-family="sans-serif">${label}</text>
+      <text x="400" y="500" font-size="20" fill="white" text-anchor="middle" opacity="0.7" font-family="sans-serif">#${idx}</text>
+    </svg>`;
+    return 'data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(svg)));
+  };
+
+  const mockAnalysis = () => ({
+    status: 'success',
+    asin: 'B0MOCK0001',
+    product_name: 'Mock Cabinet Handles (假数据测试样本)',
+    marketplace: 'US',
+    currency: '$',
+    category_rank: 'Home & Kitchen > Hardware > Cabinet Handles',
+    price: 29.99,
+    monthly_sales: 487,
+    monthly_revenue: 14595,
+    rating: 4.5,
+    ratings_count: 234,
+    bsr: 1234,
+    fba_fee: 4.5,
+    scores: { market_size: 7, entry_barrier: 5, competition: 6, profit_potential: 7.5, overall: 6.6 },
+    seasonality: Array.from({length:12},(_,i)=>({month:(i+1)+'月',level:4+Math.floor(Math.random()*5)})),
+    keywords: [
+      { keyword: 'cabinet handles', search_volume: 50000 },
+      { keyword: 'modern cabinet pulls', search_volume: 12000 },
+      { keyword: 'black cabinet hardware', search_volume: 8000 },
+      { keyword: 'matte black drawer pulls', search_volume: 5500 }
+    ],
+    pain_points: [
+      { severity: 'high', issue: '安装尺寸难找，多种孔距规格不统一', opportunity: '附赠通用安装尺' },
+      { severity: 'med', issue: '颜色批次不一致，配色对不上' },
+      { severity: 'low', issue: '螺丝偶尔过短' }
+    ],
+    competitors: [
+      { name: 'BrandA', price: 24.99, rating: 4.3, monthly_sales: 800 },
+      { name: 'BrandB', price: 32.99, rating: 4.6, monthly_sales: 320 }
+    ],
+    user_portrait: { gender:'不限', age:'30-50', occupation:'房屋装修者', lifestyle:'追求质感家居', purchase_motivation:'提升家居美观与质感' },
+    risks: [{ type: '合规', detail: '注意尺寸标注准确性' }],
+    recommendation: '推荐进入'
+  });
+
+  const mockListing = (body) => {
+    const brand = body.brand_name || 'BrandX';
+    const isRevise = body.revision_mode === 'partial' || body.revision_mode === 'full';
+    const prev = body.previous_result || {};
+    // 修改模式：基于 previous_result，只在被标记 revise 的字段加 "[已修改]" 后缀
+    const fb = body.revision_feedback || {};
+    const tag = body.revision_mode === 'full' ? '[全部重写] ' : '[已修改] ';
+    const titleNew = `${brand} Modern Cabinet Handles 5-Inch Center Matte Black Drawer Pulls Set of 10 Heavy Duty Stainless Steel Kitchen Cabinet Hardware Furniture Pulls for Bathroom Closet Door Dresser Knobs`;
+    const bulletDefaults = [
+      `PREMIUM MATTE BLACK FINISH - These cabinet handles feature a premium matte black powder-coated finish that resists fingerprints, smudges, and scratches. The smooth surface adds a modern aesthetic to any kitchen, bathroom, or office. Made from solid stainless steel for long-lasting durability and timeless style.`,
+      `PERFECT 5-INCH CENTER FIT - Designed with precise 5-inch (127mm) hole center spacing for standard cabinet drawers. Compatible with most modern kitchen cabinets, bathroom vanities, and bedroom dressers. Easy upgrade without modifying existing mounting holes.`,
+      `EASY INSTALLATION IN MINUTES - Includes machine screws in two lengths (1 inch and 1.5 inch) to fit various drawer thicknesses. Mounting hardware kit comes pre-sorted in labeled bags. Step-by-step instructions guide you through installation.`,
+      `VERSATILE APPLICATIONS - Use throughout your home: kitchen cabinets, bathroom vanities, bedroom dressers, office desks, closet doors, garage cabinets, mudroom storage. The neutral matte black blends with modern, farmhouse, industrial, and minimalist decor styles.`,
+      `COMPLETE PACKAGE CONTENTS - Includes 10 cabinet handles, 20 mounting screws (10 of each length), assembly instructions in protective packaging preventing scratches. Holds approximately 8-10 pairs of flat shoes or trainers with display space above.`
+    ];
+    const result = {
+      title: isRevise && fb.title?.revise ? tag + titleNew : (isRevise ? (prev.title || titleNew) : titleNew),
+      bullet_points: bulletDefaults.map((b, i) => {
+        const k = 'bullet_' + (i + 1);
+        if (isRevise) {
+          if (fb[k]?.revise) return tag + b + ' [按反馈调整：' + (fb[k].note || '...') + ']';
+          return (prev.bullet_points && prev.bullet_points[i]) || b;
+        }
+        return b;
+      }),
+      description: '<b>Transform Your Space Today</b><br>Looking for cabinet handles that combine modern style with rock-solid durability?<br><br><b>Premium Construction</b><br>Made from solid stainless steel with matte black powder coating, these handles resist scratches, smudges, and corrosion. The 5-inch center mount fits standard modern cabinets without any modification needed.<br><br><b>Versatile & Easy</b><br>Whether you are upgrading your kitchen, bathroom, or office, these handles work with virtually any cabinet style. Installation takes just 5 minutes per handle with the included hardware.<br><br><b>Package Contents</b><ul><li>10 × Matte Black Cabinet Handles</li><li>20 × Machine Screws (10 × 1", 10 × 1.5")</li><li>Installation Instructions</li><li>Protective Packaging</li></ul>',
+      search_terms: 'matte black handles cabinet drawer pulls hardware kitchen modern furniture bathroom vanity dresser knobs',
+      subject_matter: ['Cabinet Handle','Drawer Pull','Matte Black','Kitchen Hardware','Modern Pull'],
+      reasons: {
+        title: '标题以核心关键词 cabinet handles 起头，命中亚马逊 A9 搜索权重；中段嵌入 5-Inch / Matte Black 等长尾词；结尾追加场景关键词（Kitchen / Bathroom / Closet）',
+        bullets: 'B1 突出材质与视觉质感；B2 强调尺寸适配（命中安装难找的痛点）；B3 安装便捷；B4 多场景应用扩大受众；B5 包装清单建立信任',
+        search_terms: '补充同义词（pulls / knobs）+ 风格词（modern, farmhouse）+ 应用场景词（vanity, dresser）共 12 个长尾词，不重复标题词',
+        description: '采用问题钩子开头吸引点击；中段拆 3 个卖点段落 + HTML 列表呈现包装清单；尾部隐含 CTA'
+      },
+      keywords_used: ['cabinet handles','drawer pulls','kitchen hardware','matte black','modern pull','bathroom vanity','dresser knob','5 inch center']
+    };
+    return result;
+  };
+
+  const mockPlan = () => ({
+    success: true,
+    totalImages: 7,
+    plan: [
+      { id: 1, name: '主白底图', type: 'main', prompt: 'PRODUCT INTEGRITY: ... pure white background, product centered, sharp focus.' },
+      { id: 2, name: '尺寸规格图', type: 'main', prompt: 'PRODUCT INTEGRITY: ... dimension labels overlaid, technical diagram style.' },
+      { id: 3, name: '材质特写', type: 'main', prompt: 'PRODUCT INTEGRITY: ... macro close-up showing material texture.' },
+      { id: 4, name: '使用场景图', type: 'main', prompt: 'PRODUCT INTEGRITY: ... product installed in modern kitchen, lifestyle.' },
+      { id: 5, name: '安装演示图', type: 'main', prompt: 'PRODUCT INTEGRITY: ... hand installing the product with included tools.' },
+      { id: 6, name: '对比优势图', type: 'main', prompt: 'PRODUCT INTEGRITY: ... side-by-side comparison vs cheap alternative.' },
+      { id: 7, name: '包装展示图', type: 'main', prompt: 'PRODUCT INTEGRITY: ... package contents laid out flat lay style.' }
+    ]
+  });
+
+  const mockGenerate = (body) => ({
+    taskId: body.taskId,
+    taskName: body.taskName || '图' + body.taskId,
+    prompt: body.prompt,
+    modelUsed: body.model === 'gpt' ? 'gpt-image-2' : 'gemini',
+    success: true,
+    imageBase64: mockImg(body.taskName || '图' + body.taskId, body.taskId || 1),
+    error: null
+  });
+
+  const makeResponse = (data, delay) => new Promise(resolve => {
+    setTimeout(() => {
+      resolve(new Response(JSON.stringify(data), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json; charset=utf-8' }
+      }));
+    }, delay);
+  });
+
+  // 拦截所有 n8n fetch
+  const origFetch = window.fetch.bind(window);
+  window.fetch = function(input, init) {
+    const url = (typeof input === 'string') ? input : (input && input.url) || '';
+    if (url.indexOf('mai-n8n.zeabur.app') === -1) return origFetch(input, init);
+
+    let body = {};
+    try { body = init && init.body ? JSON.parse(init.body) : {}; } catch(e) {}
+
+    if (url.indexOf('product-analysis-report') !== -1) {
+      return makeResponse({ full_report: '## 这是 mock 模式生成的假报告\n\n包含市场分析、用户画像、关键词策略等完整内容...\n\n（实际后端会输出 2-4 千字的 Claude 深度分析）' }, 2000);
+    }
+    if (url.indexOf('product-analysis') !== -1) {
+      return makeResponse(mockAnalysis(), 2500);
+    }
+    if (url.indexOf('generate-listing-v2') !== -1) {
+      return makeResponse(mockListing(body), 3000);
+    }
+    if (url.indexOf('ai-image-gen') !== -1) {
+      if (body.action === 'plan') return makeResponse(mockPlan(), 2000);
+      if (body.action === 'generate') return makeResponse(mockGenerate(body), 2500 + Math.random() * 1500);
+    }
+    if (url.indexOf('competitor-ref-image') !== -1) {
+      return makeResponse({ imageBase64: mockImg('Competitor Ref', 99) }, 1500);
+    }
+    // 其他未知 n8n URL → 直接成功响应
+    return makeResponse({ success: true, mock: true }, 800);
+  };
+  console.log('🧪 [MOCK MODE] 已启用 - 所有 n8n 请求返回假数据');
+})();
+</script>
+</body>
+</html>
