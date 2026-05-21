@@ -217,27 +217,12 @@ html.bp-authed #loginOverlay { display: none !important; }
 }
 .btn-revise:hover { background: rgba(167,113,247,.22); }
 
-/* Bullet 行的 ✏️ 按钮：浮在右上角，平时半透明 / 悬停高亮 */
+/* Bullet 行：每行末尾跟 ✏️ 修改 按钮（跟 title / description 等其他字段同款）*/
 li.bullet-li {
-  position: relative;
-  padding: 6px 60px 6px 4px;
+  padding: 8px 4px;
   margin: 0;
   border-radius: 4px;
-  transition: background .12s;
 }
-li.bullet-li:hover { background: rgba(255,255,255,.025); }
-.btn-revise-inline {
-  position: absolute;
-  top: 6px;
-  right: 6px;
-  margin: 0;
-  padding: 3px 9px;
-  font-size: 10px;
-  opacity: .35;
-  transition: opacity .15s ease, transform .12s ease;
-}
-li.bullet-li:hover .btn-revise-inline { opacity: 1; }
-li.bullet-li.revise-marked .btn-revise-inline { opacity: 1; }
 
 /* 标记态视觉提示 */
 .listing-field.revise-marked,
@@ -246,7 +231,6 @@ li.bullet-li.revise-marked {
   border-left: 3px solid var(--gold);
   padding-left: 10px;
 }
-li.bullet-li.revise-marked { padding-right: 56px; }
 .listing-field.revise-marked .btn-revise,
 li.bullet-li.revise-marked .btn-revise {
   background: rgba(243,156,18,.18);
@@ -2507,7 +2491,7 @@ function renderListing(d) {
             const k = 'bullet_' + (i+1);
             return `<li id="rw_${k}" class="bullet-li">
               <span class="mono" style="color:var(--accent);font-size:10px;margin-right:6px">B${i+1}</span>${highlightKws(text, kwsUsed)}
-              <button class="btn-revise btn-revise-inline" id="rb_${k}" onclick="openReviseField('${k}')">✏️ 修改</button>
+              <button class="btn-revise" id="rb_${k}" onclick="openReviseField('${k}')">✏️ 修改</button>
               ${buildReviseUI(k, '例如：要强调材质 / 换个角度突出 ...')}
             </li>`;
           }).join('')}
