@@ -2714,8 +2714,8 @@ async function generateImages() {
   // ===== Step 2: 并发调 action:"generate" =====
   // 串行 7 张 ≈ 7×30s = 3.5 分钟；并发 2 张 ≈ 4×30s = 2 分钟（单用户略慢但服务器内存压力小）
   // 并发数太高的两个风险：① n8n 容器内存压力大 OOM；② Gemini/OpenAI 速率限制（429）
-  // 5 用户并发 × 2 = 10 并发上限，4GB 服务器舒适，10 RPM 也不容易触发限流
-  const IMAGE_CONCURRENCY = 2;
+  // 2GB 服务器内存有限，串行处理（1张）防止 OOM 崩溃
+  const IMAGE_CONCURRENCY = 1;
   let completed = 0, failed = 0;
   const updateProgress = () => {
     const done = completed + failed;
