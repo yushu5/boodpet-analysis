@@ -1262,7 +1262,9 @@ body{font-family:'Noto Sans SC',sans-serif;background:var(--bg);color:var(--text
     </div>
     <div class="diag-input-card">
       <h4>🔍 产品运营诊断 · 输入 1-4 个同父体 ASIN</h4>
-      <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;font-size:12px">
+      <!-- 后端地址行：已隐藏（线上走 defaultBase() 自动指向 Zeabur，本地走 127.0.0.1:8000）
+           需要排查/切换后端时可临时把 display:none 去掉 -->
+      <div style="display:none;align-items:center;gap:8px;margin-bottom:12px;font-size:12px">
         <span style="color:var(--sub);flex-shrink:0">后端地址</span>
         <input type="text" id="diagApiBaseInput" placeholder="https://xxx.zeabur.app 或 http://localhost:8000"
           style="flex:1;padding:6px 10px;font-size:12px;font-family:'JetBrains Mono',monospace;background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text)" />
@@ -4233,7 +4235,8 @@ function enterTestMode() {
       // 而 uvicorn --host 0.0.0.0 只监听 IPv4，会导致 "Failed to fetch"
       return 'http://127.0.0.1:8000';
     }
-    return ''; // 线上但未配置时留空，强制用户填
+    // 线上：默认指向生产后端（localStorage 仍优先，便于自定义/切换）
+    return 'https://boodpet-diagnosis.zeabur.app';
   }
   function loadBase(){
     let v = window.DIAG_API_BASE
